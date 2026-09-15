@@ -1,0 +1,7 @@
+{
+  "name": "ZYPHORA",
+  "description": "Modern, production-grade ecommerce marketplace with intuitive customer discovery and high-density admin controls.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
