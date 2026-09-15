@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUp, CreditCard, Headset, Lock, ShieldCheck, Truck } from 'lucide-react';
+import { ArrowUp, CreditCard, ShieldCheck, Truck } from 'lucide-react';
 
 export function Footer() {
   const scrollToTop = () => {
@@ -49,16 +49,6 @@ export function Footer() {
               <div>
                 <p className="font-semibold text-sm text-[#17202A]">100% Genuine</p>
                 <p className="text-[11px] text-[#8A9199]">Authentic verified products</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                <Headset className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="font-semibold text-sm text-[#17202A]">24/7 Assistance</p>
-                <p className="text-[11px] text-[#8A9199]">Dedicated customer support</p>
               </div>
             </div>
           </div>
@@ -122,11 +112,6 @@ export function Footer() {
             </h4>
             <ul className="space-y-2">
               <li>
-                <Link to="/orders" className="hover:text-indigo-600 transition-colors">
-                  Track Your Orders
-                </Link>
-              </li>
-              <li>
                 <Link to="/profile" className="hover:text-indigo-600 transition-colors">
                   Your Account Details
                 </Link>
@@ -136,16 +121,6 @@ export function Footer() {
                   Saved Wishlist
                 </Link>
               </li>
-              <li>
-                <span className="hover:text-indigo-600 transition-colors cursor-pointer">
-                  Shipping Rates & Policies
-                </span>
-              </li>
-              <li>
-                <span className="hover:text-indigo-600 transition-colors cursor-pointer">
-                  Returns & Replacements
-                </span>
-              </li>
             </ul>
           </div>
 
@@ -154,16 +129,6 @@ export function Footer() {
               Zyphora Business
             </h4>
             <ul className="space-y-2">
-              <li>
-                <Link to="/admin" className="hover:text-indigo-600 transition-colors font-medium">
-                  Zyphora Admin Portal
-                </Link>
-              </li>
-              <li>
-                <span className="hover:text-indigo-600 transition-colors cursor-pointer">
-                  Merchant Partnership
-                </span>
-              </li>
               <li>
                 <span className="hover:text-indigo-600 transition-colors cursor-pointer">
                   API & Developer Info
