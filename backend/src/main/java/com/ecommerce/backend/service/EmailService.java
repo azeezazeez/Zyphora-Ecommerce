@@ -194,8 +194,7 @@ public class EmailService {
             );
         }
 
-        String apiKey =
-                brevoApiKey.trim();
+        String apiKey = brevoApiKey.trim();
 
         System.out.println(
                 "Zyphora email configuration: "
@@ -444,22 +443,6 @@ public class EmailService {
         String safeAppName =
                 escapeHtml(getSafeAppName());
 
-        /*
-         * IMPORTANT:
-         *
-         * Do NOT use String.formatted() or %s placeholders here.
-         *
-         * HTML/CSS contains legitimate percentage values such as:
-         *
-         * width: 100%;
-         *
-         * Using formatted() with these values can cause:
-         *
-         * UnknownFormatConversionException: Conversion = ';'
-         *
-         * Unique placeholders are used instead.
-         */
-
         return """
                 <!DOCTYPE html>
                 <html>
@@ -473,14 +456,14 @@ public class EmailService {
                 <body style="
                     margin:0;
                     padding:0;
-                    background:#f5f7fb;
+                    background:#f4f7fb;
                     font-family:Arial,Helvetica,sans-serif;
                     color:#172033;
                 ">
 
                     <div style="
                         width:100%;
-                        padding:30px 15px;
+                        padding:30px 12px;
                         box-sizing:border-box;
                     ">
 
@@ -498,8 +481,8 @@ public class EmailService {
                                 text-align:center;
                                 background:linear-gradient(
                                     135deg,
-                                    #fce7f3,
-                                    #dbeafe
+                                    #eef2ff,
+                                    #fce7f3
                                 );
                             ">
 
@@ -529,7 +512,7 @@ public class EmailService {
                             </div>
 
                             <div style="
-                                padding:32px 25px;
+                                padding:32px 24px;
                             ">
 
                                 <h2 style="
@@ -557,8 +540,8 @@ public class EmailService {
                                 ">
                                     Thank you for creating your
                                     {{APP_NAME}} account.
-                                    Enter the verification code below to
-                                    complete your registration.
+                                    Enter the verification code below
+                                    to complete your registration.
                                 </p>
 
                                 <div style="
@@ -622,18 +605,9 @@ public class EmailService {
                 </body>
                 </html>
                 """
-                .replace(
-                        "{{APP_NAME}}",
-                        safeAppName
-                )
-                .replace(
-                        "{{USERNAME}}",
-                        safeUsername
-                )
-                .replace(
-                        "{{OTP}}",
-                        safeOtp
-                );
+                .replace("{{APP_NAME}}", safeAppName)
+                .replace("{{USERNAME}}", safeUsername)
+                .replace("{{OTP}}", safeOtp);
     }
 
     // ============================================================
@@ -662,14 +636,14 @@ public class EmailService {
                 <body style="
                     margin:0;
                     padding:0;
-                    background:#f5f7fb;
+                    background:#f4f7fb;
                     font-family:Arial,Helvetica,sans-serif;
                     color:#172033;
                 ">
 
                     <div style="
                         width:100%;
-                        padding:30px 15px;
+                        padding:30px 12px;
                         box-sizing:border-box;
                     ">
 
@@ -679,7 +653,7 @@ public class EmailService {
                             background:#ffffff;
                             border:1px solid #e5e7eb;
                             border-radius:18px;
-                            padding:30px 25px;
+                            padding:30px 24px;
                             box-sizing:border-box;
                         ">
 
@@ -764,14 +738,8 @@ public class EmailService {
                 </body>
                 </html>
                 """
-                .replace(
-                        "{{APP_NAME}}",
-                        safeAppName
-                )
-                .replace(
-                        "{{OTP}}",
-                        safeOtp
-                );
+                .replace("{{APP_NAME}}", safeAppName)
+                .replace("{{OTP}}", safeOtp);
     }
 
     // ============================================================
@@ -793,8 +761,11 @@ public class EmailService {
         String safeOrderNumber =
                 escapeHtml(orderNumber);
 
-        String orderDate =
-                "N/A";
+        // --------------------------------------------------------
+        // ORDER DATE
+        // --------------------------------------------------------
+
+        String orderDate = "N/A";
 
         if (order.getOrderDate() != null) {
 
@@ -812,6 +783,10 @@ public class EmailService {
         String safeOrderDate =
                 escapeHtml(orderDate);
 
+        // --------------------------------------------------------
+        // STATUS
+        // --------------------------------------------------------
+
         String status =
                 order.getStatus() != null
                         ? order.getStatus().name()
@@ -820,10 +795,44 @@ public class EmailService {
         String safeStatus =
                 escapeHtml(status);
 
+        // --------------------------------------------------------
+        // PAYMENT METHOD
+        // --------------------------------------------------------
+
+        String paymentMethod =
+                order.getPaymentMethod() != null
+                        ? order.getPaymentMethod().trim().toUpperCase(Locale.ROOT)
+                        : "COD";
+
+        String paymentLabel =
+                switch (paymentMethod) {
+                    case "UPI" -> "UPI";
+                    case "CARD" -> "Credit / Debit Card";
+                    default -> "Cash on Delivery";
+                };
+
+        String safePaymentMethod =
+                escapeHtml(paymentLabel);
+
+        // --------------------------------------------------------
+        // TOTAL
+        // --------------------------------------------------------
+
         double total =
                 order.getTotalAmount() != null
                         ? order.getTotalAmount()
                         : 0.0;
+
+        String formattedTotal =
+                String.format(
+                        Locale.ENGLISH,
+                        "%.2f",
+                        total
+                );
+
+        // --------------------------------------------------------
+        // ORDER ITEMS
+        // --------------------------------------------------------
 
         StringBuilder itemsHtml =
                 new StringBuilder();
@@ -831,8 +840,7 @@ public class EmailService {
         if (order.getItems() != null
                 && !order.getItems().isEmpty()) {
 
-            for (OrderItem item :
-                    order.getItems()) {
+            for (OrderItem item : order.getItems()) {
 
                 String productName =
                         item.getProductName() != null
@@ -849,43 +857,57 @@ public class EmailService {
                                 ? item.getSubtotal()
                                 : 0.0;
 
+                String formattedSubtotal =
+                        String.format(
+                                Locale.ENGLISH,
+                                "%.2f",
+                                subtotal
+                        );
+
                 itemsHtml
-                        .append("<tr>")
-
-                        .append("<td style=\"")
-                        .append("padding:14px 8px;")
-                        .append("border-bottom:1px solid #eef2f7;")
-                        .append("color:#172033;")
-                        .append("word-break:break-word;")
-                        .append("\">")
+                        .append("""
+                                <tr>
+                                    <td style="
+                                        padding:15px 8px;
+                                        border-bottom:1px solid #edf1f7;
+                                        color:#172033;
+                                        font-size:14px;
+                                        line-height:1.5;
+                                        word-break:break-word;
+                                    ">
+                                """)
                         .append(escapeHtml(productName))
-                        .append("</td>")
+                        .append("""
+                                    </td>
 
-                        .append("<td style=\"")
-                        .append("padding:14px 8px;")
-                        .append("text-align:center;")
-                        .append("border-bottom:1px solid #eef2f7;")
-                        .append("color:#667085;")
-                        .append("\">")
+                                    <td style="
+                                        padding:15px 8px;
+                                        border-bottom:1px solid #edf1f7;
+                                        text-align:center;
+                                        color:#667085;
+                                        font-size:14px;
+                                    ">
+                                """)
                         .append(quantity)
-                        .append("</td>")
+                        .append("""
+                                    </td>
 
-                        .append("<td style=\"")
-                        .append("padding:14px 8px;")
-                        .append("text-align:right;")
-                        .append("border-bottom:1px solid #eef2f7;")
-                        .append("font-weight:600;")
-                        .append("\">₹")
-                        .append(
-                                String.format(
-                                        Locale.ENGLISH,
-                                        "%.2f",
-                                        subtotal
-                                )
-                        )
-                        .append("</td>")
-
-                        .append("</tr>");
+                                    <td style="
+                                        padding:15px 8px;
+                                        border-bottom:1px solid #edf1f7;
+                                        text-align:right;
+                                        color:#172033;
+                                        font-size:14px;
+                                        font-weight:600;
+                                        white-space:nowrap;
+                                    ">
+                                        ₹
+                                """)
+                        .append(formattedSubtotal)
+                        .append("""
+                                    </td>
+                                </tr>
+                                """);
             }
 
         } else {
@@ -894,9 +916,10 @@ public class EmailService {
                     <tr>
                         <td colspan="3"
                             style="
-                                padding:20px;
+                                padding:22px 10px;
                                 text-align:center;
                                 color:#94a3b8;
+                                font-size:14px;
                             ">
                             Order items unavailable
                         </td>
@@ -907,147 +930,192 @@ public class EmailService {
         String safeAppName =
                 escapeHtml(getSafeAppName());
 
-        String formattedTotal =
-                String.format(
-                        Locale.ENGLISH,
-                        "%.2f",
-                        total
-                );
+        // ========================================================
+        // EMAIL HTML
+        // ========================================================
 
         return """
                 <!DOCTYPE html>
                 <html>
+
                 <head>
                     <meta charset="UTF-8">
+
                     <meta name="viewport"
-                          content="width=device-width, initial-scale=1.0">
-                    <title>Order Confirmation</title>
+                          content="width=device-width,
+                                   initial-scale=1.0">
+
+                    <title>
+                        Order Confirmation - {{ORDER_ID}}
+                    </title>
                 </head>
 
                 <body style="
                     margin:0;
                     padding:0;
-                    background:#f5f7fb;
+                    background:#f3f6fa;
                     font-family:Arial,Helvetica,sans-serif;
                     color:#172033;
                 ">
 
+                    <!-- OUTER CONTAINER -->
+
                     <div style="
                         width:100%;
-                        padding:30px 15px;
+                        padding:28px 12px;
                         box-sizing:border-box;
+                        background:#f3f6fa;
                     ">
 
+                        <!-- MAIN CARD -->
+
                         <div style="
-                            max-width:650px;
+                            max-width:620px;
                             margin:0 auto;
                             background:#ffffff;
-                            border:1px solid #e5e7eb;
-                            border-radius:18px;
+                            border:1px solid #e5e9f0;
+                            border-radius:20px;
                             overflow:hidden;
                         ">
 
+                            <!-- BRAND HEADER -->
+
                             <div style="
-                                background:linear-gradient(
-                                    135deg,
-                                    #dbeafe,
-                                    #fce7f3
-                                );
-                                padding:32px 20px;
-                                text-align:center;
+                                padding:28px 24px;
+                                background:#111827;
                             ">
 
-                                <div style="
-                                    width:52px;
-                                    height:52px;
-                                    line-height:52px;
-                                    text-align:center;
-                                    margin:0 auto;
-                                    background:#ffffff;
-                                    border-radius:15px;
-                                    color:#4f46e5;
-                                    font-size:26px;
-                                    font-weight:800;
-                                ">
-                                    Z
-                                </div>
+                                <table
+                                    width="100%"
+                                    cellpadding="0"
+                                    cellspacing="0"
+                                    border="0">
+
+                                    <tr>
+
+                                        <td
+                                            valign="middle"
+                                            style="
+                                                text-align:left;
+                                            ">
+
+                                            <div style="
+                                                font-size:26px;
+                                                line-height:1;
+                                                font-weight:800;
+                                                color:#ffffff;
+                                                letter-spacing:-0.5px;
+                                            ">
+                                                {{APP_NAME}}
+                                            </div>
+
+                                            <div style="
+                                                margin-top:7px;
+                                                color:#9ca3af;
+                                                font-size:11px;
+                                                line-height:1.4;
+                                                letter-spacing:2px;
+                                                text-transform:uppercase;
+                                            ">
+                                                Order Confirmation
+                                            </div>
+
+                                        </td>
+
+                                        <td
+                                            valign="middle"
+                                            style="
+                                                text-align:right;
+                                            ">
+
+                                            <div style="
+                                                display:inline-block;
+                                                padding:8px 12px;
+                                                border:1px solid #374151;
+                                                border-radius:20px;
+                                                color:#d1d5db;
+                                                font-size:11px;
+                                                font-weight:700;
+                                                letter-spacing:0.5px;
+                                            ">
+                                                {{STATUS}}
+                                            </div>
+
+                                        </td>
+
+                                    </tr>
+
+                                </table>
+
+                            </div>
+
+                            <!-- CONTENT -->
+
+                            <div style="
+                                padding:30px 24px;
+                            ">
+
+                                <!-- GREETING -->
 
                                 <h1 style="
-                                    margin:18px 0 8px;
+                                    margin:0 0 12px;
+                                    color:#111827;
                                     font-size:26px;
-                                    line-height:1.3;
-                                    color:#172033;
+                                    line-height:1.25;
+                                    font-weight:700;
+                                    letter-spacing:-0.5px;
                                 ">
-                                    Order Confirmed
+                                    Thanks for your order,
+                                    {{USERNAME}}.
                                 </h1>
 
                                 <p style="
                                     margin:0;
-                                    color:#475569;
-                                    font-size:14px;
-                                ">
-                                    Thank you for shopping with {{APP_NAME}}.
-                                </p>
-
-                            </div>
-
-                            <div style="
-                                padding:32px 25px;
-                                box-sizing:border-box;
-                            ">
-
-                                <p style="
-                                    margin:0 0 15px;
-                                    font-size:15px;
-                                    line-height:1.7;
-                                    color:#172033;
-                                ">
-                                    Hi {{USERNAME}},
-                                </p>
-
-                                <p style="
-                                    margin:0;
                                     color:#667085;
+                                    font-size:14px;
                                     line-height:1.7;
-                                    font-size:15px;
                                 ">
-                                    Your order has been successfully placed.
-                                    Here are your order details.
+                                    Your order has been placed
+                                    successfully. Here is a clean
+                                    summary for your records.
                                 </p>
+
+                                <!-- ORDER INFORMATION -->
 
                                 <div style="
-                                    margin:24px 0;
-                                    padding:20px;
+                                    margin-top:24px;
+                                    padding:18px;
                                     background:#f8fafc;
+                                    border:1px solid #edf1f7;
                                     border-radius:14px;
-                                    overflow:hidden;
                                 ">
 
                                     <table
                                         width="100%"
                                         cellpadding="0"
                                         cellspacing="0"
-                                        border="0"
-                                        style="
-                                            width:100%;
-                                            border-collapse:collapse;
-                                        ">
+                                        border="0">
+
+                                        <!-- ORDER ID -->
 
                                         <tr>
 
                                             <td style="
-                                                padding:7px 0;
+                                                padding:6px 0;
                                                 color:#64748b;
-                                                font-size:14px;
+                                                font-size:12px;
+                                                text-transform:uppercase;
+                                                letter-spacing:0.5px;
                                             ">
                                                 Order ID
                                             </td>
 
                                             <td style="
-                                                padding:7px 0;
+                                                padding:6px 0;
                                                 text-align:right;
+                                                color:#111827;
+                                                font-size:13px;
                                                 font-weight:700;
-                                                font-size:14px;
                                                 word-break:break-all;
                                             ">
                                                 {{ORDER_ID}}
@@ -1055,44 +1123,79 @@ public class EmailService {
 
                                         </tr>
 
+                                        <!-- DATE -->
+
                                         <tr>
 
                                             <td style="
-                                                padding:7px 0;
+                                                padding:6px 0;
                                                 color:#64748b;
-                                                font-size:14px;
+                                                font-size:12px;
+                                                text-transform:uppercase;
+                                                letter-spacing:0.5px;
                                             ">
                                                 Date
                                             </td>
 
                                             <td style="
-                                                padding:7px 0;
+                                                padding:6px 0;
                                                 text-align:right;
-                                                font-size:14px;
+                                                color:#111827;
+                                                font-size:13px;
                                             ">
                                                 {{ORDER_DATE}}
                                             </td>
 
                                         </tr>
 
+                                        <!-- STATUS -->
+
                                         <tr>
 
                                             <td style="
-                                                padding:7px 0;
+                                                padding:6px 0;
                                                 color:#64748b;
-                                                font-size:14px;
+                                                font-size:12px;
+                                                text-transform:uppercase;
+                                                letter-spacing:0.5px;
                                             ">
                                                 Status
                                             </td>
 
                                             <td style="
-                                                padding:7px 0;
+                                                padding:6px 0;
                                                 text-align:right;
-                                                font-weight:700;
                                                 color:#4f46e5;
-                                                font-size:14px;
+                                                font-size:13px;
+                                                font-weight:700;
                                             ">
                                                 {{STATUS}}
+                                            </td>
+
+                                        </tr>
+
+                                        <!-- PAYMENT -->
+
+                                        <tr>
+
+                                            <td style="
+                                                padding:6px 0;
+                                                color:#64748b;
+                                                font-size:12px;
+                                                text-transform:uppercase;
+                                                letter-spacing:0.5px;
+                                            ">
+                                                Payment
+                                            </td>
+
+                                            <td style="
+                                                padding:6px 0;
+                                                text-align:right;
+                                                color:#111827;
+                                                font-size:13px;
+                                                font-weight:600;
+                                            ">
+                                                {{PAYMENT_METHOD}}
                                             </td>
 
                                         </tr>
@@ -1101,17 +1204,25 @@ public class EmailService {
 
                                 </div>
 
-                                <h3 style="
+                                <!-- ORDER SUMMARY TITLE -->
+
+                                <h2 style="
                                     margin:28px 0 14px;
+                                    color:#111827;
                                     font-size:17px;
-                                    color:#172033;
+                                    line-height:1.4;
+                                    font-weight:700;
                                 ">
                                     Order Summary
-                                </h3>
+                                </h2>
+
+                                <!-- ITEMS -->
 
                                 <div style="
                                     width:100%;
-                                    overflow-x:auto;
+                                    overflow:hidden;
+                                    border:1px solid #edf1f7;
+                                    border-radius:14px;
                                 ">
 
                                     <table
@@ -1121,9 +1232,7 @@ public class EmailService {
                                         border="0"
                                         style="
                                             width:100%;
-                                            min-width:400px;
                                             border-collapse:collapse;
-                                            font-size:14px;
                                         ">
 
                                         <thead>
@@ -1131,28 +1240,43 @@ public class EmailService {
                                             <tr>
 
                                                 <th style="
-                                                    padding:10px 8px;
+                                                    padding:12px 8px;
                                                     text-align:left;
+                                                    background:#f8fafc;
                                                     color:#64748b;
-                                                    border-bottom:1px solid #e2e8f0;
+                                                    font-size:11px;
+                                                    font-weight:700;
+                                                    text-transform:uppercase;
+                                                    letter-spacing:0.6px;
+                                                    border-bottom:1px solid #edf1f7;
                                                 ">
-                                                    Product
+                                                    Item
                                                 </th>
 
                                                 <th style="
-                                                    padding:10px 8px;
+                                                    padding:12px 8px;
                                                     text-align:center;
+                                                    background:#f8fafc;
                                                     color:#64748b;
-                                                    border-bottom:1px solid #e2e8f0;
+                                                    font-size:11px;
+                                                    font-weight:700;
+                                                    text-transform:uppercase;
+                                                    letter-spacing:0.6px;
+                                                    border-bottom:1px solid #edf1f7;
                                                 ">
                                                     Qty
                                                 </th>
 
                                                 <th style="
-                                                    padding:10px 8px;
+                                                    padding:12px 8px;
                                                     text-align:right;
+                                                    background:#f8fafc;
                                                     color:#64748b;
-                                                    border-bottom:1px solid #e2e8f0;
+                                                    font-size:11px;
+                                                    font-weight:700;
+                                                    text-transform:uppercase;
+                                                    letter-spacing:0.6px;
+                                                    border-bottom:1px solid #edf1f7;
                                                 ">
                                                     Amount
                                                 </th>
@@ -1162,47 +1286,114 @@ public class EmailService {
                                         </thead>
 
                                         <tbody>
+
                                             {{ITEMS}}
+
                                         </tbody>
 
                                     </table>
 
                                 </div>
 
+                                <!-- TOTAL -->
+
                                 <div style="
-                                    margin-top:20px;
-                                    padding-top:18px;
-                                    border-top:2px solid #e2e8f0;
-                                    text-align:right;
+                                    margin-top:18px;
+                                    padding:18px 0 0;
+                                    border-top:2px solid #eef2f7;
                                 ">
 
-                                    <span style="
-                                        color:#64748b;
-                                        margin-right:8px;
-                                        font-size:14px;
-                                    ">
-                                        Total
-                                    </span>
+                                    <table
+                                        width="100%"
+                                        cellpadding="0"
+                                        cellspacing="0"
+                                        border="0">
 
-                                    <strong style="
-                                        font-size:23px;
-                                        color:#4f46e5;
+                                        <tr>
+
+                                            <td style="
+                                                color:#64748b;
+                                                font-size:14px;
+                                                font-weight:600;
+                                            ">
+                                                Total
+                                            </td>
+
+                                            <td style="
+                                                text-align:right;
+                                                color:#111827;
+                                                font-size:24px;
+                                                font-weight:800;
+                                                white-space:nowrap;
+                                            ">
+                                                ₹{{TOTAL}}
+                                            </td>
+
+                                        </tr>
+
+                                    </table>
+
+                                </div>
+
+                                <!-- MESSAGE -->
+
+                                <div style="
+                                    margin-top:26px;
+                                    padding:16px;
+                                    background:#fafbfc;
+                                    border-radius:12px;
+                                ">
+
+                                    <p style="
+                                        margin:0;
+                                        color:#7b8494;
+                                        font-size:12px;
+                                        line-height:1.7;
                                     ">
-                                        ₹{{TOTAL}}
-                                    </strong>
+                                        This email is your order
+                                        confirmation from
+                                        {{APP_NAME}}.
+                                        Please keep it for your records.
+                                    </p>
 
                                 </div>
 
                             </div>
 
+                            <!-- FOOTER -->
+
                             <div style="
-                                padding:20px;
-                                border-top:1px solid #eef2f7;
+                                padding:22px 20px;
+                                background:#fafbfc;
+                                border-top:1px solid #edf1f7;
                                 text-align:center;
-                                color:#94a3b8;
-                                font-size:12px;
                             ">
-                                © {{APP_NAME}} · Thank you for choosing {{APP_NAME}}.
+
+                                <div style="
+                                    color:#475569;
+                                    font-size:13px;
+                                    font-weight:700;
+                                ">
+                                    {{APP_NAME}}
+                                </div>
+
+                                <div style="
+                                    margin-top:6px;
+                                    color:#94a3b8;
+                                    font-size:11px;
+                                    line-height:1.5;
+                                ">
+                                    Thank you for shopping with us.
+                                </div>
+
+                                <div style="
+                                    margin-top:10px;
+                                    color:#c0c6d0;
+                                    font-size:10px;
+                                ">
+                                    © {{APP_NAME}}. All rights reserved.
+                                </div>
+
                             </div>
 
                         </div>
@@ -1212,34 +1403,14 @@ public class EmailService {
                 </body>
                 </html>
                 """
-                .replace(
-                        "{{APP_NAME}}",
-                        safeAppName
-                )
-                .replace(
-                        "{{USERNAME}}",
-                        safeUsername
-                )
-                .replace(
-                        "{{ORDER_ID}}",
-                        safeOrderNumber
-                )
-                .replace(
-                        "{{ORDER_DATE}}",
-                        safeOrderDate
-                )
-                .replace(
-                        "{{STATUS}}",
-                        safeStatus
-                )
-                .replace(
-                        "{{ITEMS}}",
-                        itemsHtml.toString()
-                )
-                .replace(
-                        "{{TOTAL}}",
-                        formattedTotal
-                );
+                .replace("{{APP_NAME}}", safeAppName)
+                .replace("{{USERNAME}}", safeUsername)
+                .replace("{{ORDER_ID}}", safeOrderNumber)
+                .replace("{{ORDER_DATE}}", safeOrderDate)
+                .replace("{{STATUS}}", safeStatus)
+                .replace("{{PAYMENT_METHOD}}", safePaymentMethod)
+                .replace("{{ITEMS}}", itemsHtml.toString())
+                .replace("{{TOTAL}}", formattedTotal);
     }
 
     // ============================================================
