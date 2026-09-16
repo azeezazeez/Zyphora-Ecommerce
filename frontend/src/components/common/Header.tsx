@@ -267,8 +267,7 @@ export function Header() {
               to="/orders"
               className="hidden lg:flex flex-col text-xs px-2.5 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
             >
-              <span className="text-[#8A9199] text-[10px]">Returns</span>
-              <span className="font-semibold text-[#17202A]">& Orders</span>
+              <span className="font-semibold text-[#17202A]">Orders</span>
             </Link>
 
             {/* Wishlist Link */}
