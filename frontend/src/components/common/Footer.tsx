@@ -130,14 +130,14 @@ export function Footer() {
             </h4>
             <ul className="space-y-2">
               <li>
-                <span className="hover:text-indigo-600 transition-colors cursor-pointer">
+                <Link to="/developer" className="hover:text-indigo-600 transition-colors">
                   API & Developer Info
-                </span>
+                </Link>
               </li>
               <li>
-                <span className="hover:text-indigo-600 transition-colors cursor-pointer">
+                <Link to="/privacy" className="hover:text-indigo-600 transition-colors">
                   Privacy Notice
-                </span>
+                </Link>
               </li>
             </ul>
           </div>
@@ -146,9 +146,9 @@ export function Footer() {
         <div className="border-t border-[#E1E5E9] mt-8 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-[#8A9199]">
           <p>© 2026 ZYPHORA, Inc. or its affiliates. All rights reserved.</p>
           <div className="flex items-center gap-4">
-            <span className="hover:text-[#17202A] cursor-pointer">Conditions of Use</span>
-            <span className="hover:text-[#17202A] cursor-pointer">Privacy Notice</span>
-            <span className="hover:text-[#17202A] cursor-pointer">Security</span>
+            <Link to="/terms" className="hover:text-[#17202A] transition-colors">Conditions of Use</Link>
+            <Link to="/privacy" className="hover:text-[#17202A] transition-colors">Privacy Notice</Link>
+            <Link to="/security" className="hover:text-[#17202A] transition-colors">Security</Link>
           </div>
         </div>
       </div>
