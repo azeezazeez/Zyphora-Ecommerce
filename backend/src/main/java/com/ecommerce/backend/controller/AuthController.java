@@ -84,7 +84,6 @@ public class AuthController {
         map.put("state", user.getState());
         map.put("country", user.getCountry());
         map.put("zipCode", user.getZipCode());
-        map.put("profileImage", user.getProfileImage());
 
         map.put(
                 "createdAt",
@@ -319,12 +318,12 @@ public class AuthController {
         } catch (IllegalArgumentException e) {
 
             /*
-             * These are expected registration validation errors,
-             * such as:
+             * Expected registration validation errors:
              *
              * - Email already registered
              * - Username already taken
              */
+
             System.err.println(
                     "Zyphora registration rejected: "
                             + e.getMessage()
@@ -346,6 +345,7 @@ public class AuthController {
             /*
              * Only OTP resend cooldown should return 429.
              */
+
             if (message != null
                     && message.startsWith("Please wait")) {
 
@@ -362,12 +362,8 @@ public class AuthController {
 
             /*
              * Email/Brevo failure.
-             *
-             * Do not expose Brevo credentials or internal
-             * infrastructure details to the frontend.
-             *
-             * The detailed exception is logged on Render.
              */
+
             System.err.println(
                     "================================================"
             );
@@ -391,14 +387,14 @@ public class AuthController {
                 System.err.println(
                         "Cause type: "
                                 + e.getCause()
-                                        .getClass()
-                                        .getName()
+                                .getClass()
+                                .getName()
                 );
 
                 System.err.println(
                         "Cause message: "
                                 + e.getCause()
-                                        .getMessage()
+                                .getMessage()
                 );
             }
 
@@ -420,6 +416,7 @@ public class AuthController {
             /*
              * Unexpected runtime failure.
              */
+
             System.err.println(
                     "================================================"
             );
@@ -443,14 +440,14 @@ public class AuthController {
                 System.err.println(
                         "Cause type: "
                                 + e.getCause()
-                                        .getClass()
-                                        .getName()
+                                .getClass()
+                                .getName()
                 );
 
                 System.err.println(
                         "Cause message: "
                                 + e.getCause()
-                                        .getMessage()
+                                .getMessage()
                 );
             }
 
@@ -880,6 +877,10 @@ public class AuthController {
                     );
         }
 
+        // ========================================================
+        // USERNAME
+        // ========================================================
+
         if (request.containsKey("username")) {
 
             String newUsername =
@@ -916,6 +917,10 @@ public class AuthController {
             );
         }
 
+        // ========================================================
+        // PHONE
+        // ========================================================
+
         if (request.containsKey("phoneNumber")) {
             user.setPhone(
                     nullOrTrimmed(
@@ -923,6 +928,10 @@ public class AuthController {
                     )
             );
         }
+
+        // ========================================================
+        // ADDRESS
+        // ========================================================
 
         if (request.containsKey("address")) {
             user.setAddress(
@@ -932,6 +941,10 @@ public class AuthController {
             );
         }
 
+        // ========================================================
+        // CITY
+        // ========================================================
+
         if (request.containsKey("city")) {
             user.setCity(
                     nullOrTrimmed(
@@ -939,6 +952,10 @@ public class AuthController {
                     )
             );
         }
+
+        // ========================================================
+        // STATE
+        // ========================================================
 
         if (request.containsKey("state")) {
             user.setState(
@@ -948,6 +965,10 @@ public class AuthController {
             );
         }
 
+        // ========================================================
+        // COUNTRY
+        // ========================================================
+
         if (request.containsKey("country")) {
             user.setCountry(
                     nullOrTrimmed(
@@ -955,6 +976,10 @@ public class AuthController {
                     )
             );
         }
+
+        // ========================================================
+        // ZIP CODE
+        // ========================================================
 
         if (request.containsKey("zipCode")) {
             user.setZipCode(
@@ -964,13 +989,12 @@ public class AuthController {
             );
         }
 
-        if (request.containsKey("profileImage")) {
-            user.setProfileImage(
-                    nullOrTrimmed(
-                            request.get("profileImage")
-                    )
-            );
-        }
+        /*
+         * profileImage intentionally removed.
+         *
+         * The profile_image database column is no longer
+         * part of the User entity or profile API.
+         */
 
         User updated =
                 userRepository.save(user);
