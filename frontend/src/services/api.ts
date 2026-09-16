@@ -27,7 +27,10 @@ export class ApiError extends Error {
   }
 }
 
-// Helper to get stored auth token
+// =============================================================
+// AUTH STORAGE
+// =============================================================
+
 export function getStoredUser(): User | null {
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
@@ -38,7 +41,7 @@ export function getStoredUser(): User | null {
 
     const user: User = JSON.parse(raw);
 
-    // Check if token is expired if JWT contains exp
+    // Check JWT expiration locally.
     if (user.token) {
       const parts = user.token.split('.');
 
@@ -51,7 +54,7 @@ export function getStoredUser(): User | null {
             return null;
           }
         } catch {
-          // Ignore JWT decoding errors
+          // Ignore JWT decoding errors.
         }
       }
     }
@@ -73,33 +76,66 @@ export function clearStoredUser(): void {
   localStorage.removeItem(AUTH_STORAGE_KEY);
 }
 
-// Core fetch wrapper
+// =============================================================
+// REQUEST HELPER
+// =============================================================
+
+interface RequestOptions extends RequestInit {
+  requiresAuth?: boolean;
+}
+
 async function request<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestOptions = {}
 ): Promise<T> {
   const url = `${API_BASE_URL}${
     endpoint.startsWith('/') ? endpoint : `/${endpoint}`
   }`;
 
-  const currentUser = getStoredUser();
+  const {
+    requiresAuth = false,
+    ...fetchOptions
+  } = options;
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-    ...(options.headers as Record<string, string>),
-  };
+  const headers = new Headers(fetchOptions.headers);
 
-  // Attach JWT to authenticated requests
-  if (currentUser?.token) {
-    headers['Authorization'] = `Bearer ${currentUser.token}`;
+  /*
+   * Only add Content-Type when there is actually a request body.
+   *
+   * This avoids unnecessary headers on GET/DELETE requests.
+   */
+  if (fetchOptions.body && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  headers.set('Accept', 'application/json');
+
+  /*
+   * Only attach JWT when this endpoint actually needs authentication.
+   *
+   * Public endpoints such as:
+   *   /products
+   *   /auth/login
+   *   /auth/register
+   *
+   * no longer receive an unnecessary Authorization header.
+   */
+  if (requiresAuth) {
+    const currentUser = getStoredUser();
+
+    if (currentUser?.token) {
+      headers.set(
+        'Authorization',
+        `Bearer ${currentUser.token}`
+      );
+    }
   }
 
   let response: Response;
 
   try {
     response = await fetch(url, {
-      ...options,
+      ...fetchOptions,
       headers,
     });
   } catch (err: any) {
@@ -113,8 +149,6 @@ async function request<T>(
   /*
    * Only remove authentication when the backend explicitly
    * returns 401 Unauthorized.
-   *
-   * A successful profile update will never reach this block.
    */
   if (response.status === 401) {
     clearStoredUser();
@@ -129,7 +163,7 @@ async function request<T>(
     );
   }
 
-  // Try parsing JSON response
+  // Parse response.
   let json: any = null;
 
   const text = await response.text();
@@ -156,7 +190,13 @@ async function request<T>(
     );
   }
 
-  // Unwrap { success: true, data: T } standard payload if present
+  /*
+   * Unwrap:
+   * {
+   *   success: true,
+   *   data: ...
+   * }
+   */
   if (
     json &&
     typeof json === 'object' &&
@@ -168,6 +208,10 @@ async function request<T>(
 
   return json as T;
 }
+
+// =============================================================
+// API
+// =============================================================
 
 export const api = {
   // -------------------------------------------------------------
@@ -183,6 +227,7 @@ export const api = {
     return request('/auth/register', {
       method: 'POST',
       body: JSON.stringify(payload),
+      requiresAuth: false,
     });
   },
 
@@ -193,6 +238,7 @@ export const api = {
     return request('/auth/register/verify-otp', {
       method: 'POST',
       body: JSON.stringify(payload),
+      requiresAuth: false,
     });
   },
 
@@ -203,6 +249,7 @@ export const api = {
     const user = await request<User>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
+      requiresAuth: false,
     });
 
     if (user && user.token) {
@@ -218,6 +265,7 @@ export const api = {
     return request('/auth/forgot-password/generate-otp', {
       method: 'POST',
       body: JSON.stringify({ email }),
+      requiresAuth: false,
     });
   },
 
@@ -230,6 +278,7 @@ export const api = {
     return request('/auth/forgot-password/reset', {
       method: 'POST',
       body: JSON.stringify(payload),
+      requiresAuth: false,
     });
   },
 
@@ -238,14 +287,13 @@ export const api = {
   // -------------------------------------------------------------
 
   async getProfile(): Promise<User> {
-    const profile = await request<User>('/auth/profile');
+    const profile = await request<User>(
+      '/auth/profile',
+      {
+        requiresAuth: true,
+      }
+    );
 
-    /*
-     * The backend profile endpoint may return profile information
-     * without returning the JWT.
-     *
-     * Always preserve the currently stored token.
-     */
     const currentUser = getStoredUser();
 
     if (currentUser?.token && profile) {
@@ -266,10 +314,6 @@ export const api = {
   async updateProfile(
     data: Partial<User>
   ): Promise<User> {
-    /*
-     * Get the currently authenticated user BEFORE making
-     * the update request.
-     */
     const currentUser = getStoredUser();
 
     if (!currentUser?.token) {
@@ -279,45 +323,23 @@ export const api = {
       );
     }
 
-    /*
-     * Send profile update to backend.
-     */
     const updatedProfile = await request<User>(
       '/auth/profile',
       {
         method: 'PUT',
         body: JSON.stringify(data),
+        requiresAuth: true,
       }
     );
 
-    /*
-     * IMPORTANT:
-     *
-     * The backend response may contain only the updated
-     * profile fields and NOT the JWT token.
-     *
-     * Therefore, merge the response with the existing user
-     * and explicitly preserve the existing token.
-     */
     const updatedUser: User = {
       ...currentUser,
       ...updatedProfile,
       token: currentUser.token,
     };
 
-    /*
-     * Save the COMPLETE authenticated user.
-     */
     saveStoredUser(updatedUser);
 
-    /*
-     * IMPORTANT:
-     *
-     * Return updatedUser, NOT updatedProfile.
-     *
-     * This prevents AuthContext from replacing currentUser
-     * with an object that has no JWT token.
-     */
     return updatedUser;
   },
 
@@ -326,16 +348,24 @@ export const api = {
     newPassword: string;
     confirmPassword: string;
   }): Promise<any> {
-    return request('/auth/profile/change-password', {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    });
+    return request(
+      '/auth/profile/change-password',
+      {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+        requiresAuth: true,
+      }
+    );
   },
 
   async deleteProfile(): Promise<any> {
-    const res = await request('/auth/profile', {
-      method: 'DELETE',
-    });
+    const res = await request(
+      '/auth/profile',
+      {
+        method: 'DELETE',
+        requiresAuth: true,
+      }
+    );
 
     clearStoredUser();
 
@@ -379,7 +409,10 @@ export const api = {
       : '/products';
 
     const products = await request<Product[]>(
-      endpoint
+      endpoint,
+      {
+        requiresAuth: false,
+      }
     );
 
     return Array.isArray(products)
@@ -391,7 +424,10 @@ export const api = {
     id: string | number
   ): Promise<Product> {
     return request<Product>(
-      `/products/${id}`
+      `/products/${id}`,
+      {
+        requiresAuth: false,
+      }
     );
   },
 
@@ -404,7 +440,10 @@ export const api = {
   ): Promise<CartResponse> {
     try {
       const response = await request<any>(
-        `/cart/${userId}`
+        `/cart/${userId}`,
+        {
+          requiresAuth: true,
+        }
       );
 
       if (Array.isArray(response)) {
@@ -448,7 +487,6 @@ export const api = {
           : [],
       };
     } catch (err: any) {
-      // If 404 or empty cart
       if (err.status === 404) {
         return {
           userId,
@@ -474,6 +512,7 @@ export const api = {
         productId: String(productId),
         quantity,
       }),
+      requiresAuth: true,
     });
   },
 
@@ -489,6 +528,7 @@ export const api = {
         productId: String(productId),
         quantity,
       }),
+      requiresAuth: true,
     });
   },
 
@@ -500,6 +540,7 @@ export const api = {
       `/cart/remove/${userId}/${productId}`,
       {
         method: 'DELETE',
+        requiresAuth: true,
       }
     );
   },
@@ -511,6 +552,7 @@ export const api = {
       `/cart/clear/${userId}`,
       {
         method: 'DELETE',
+        requiresAuth: true,
       }
     );
   },
@@ -525,7 +567,10 @@ export const api = {
     try {
       const items =
         await request<WishlistItem[]>(
-          `/wishlist/${userId}`
+          `/wishlist/${userId}`,
+          {
+            requiresAuth: true,
+          }
         );
 
       return Array.isArray(items)
@@ -550,6 +595,7 @@ export const api = {
         userId,
         productId: String(productId),
       }),
+      requiresAuth: true,
     });
   },
 
@@ -561,6 +607,7 @@ export const api = {
       `/wishlist/remove/${userId}/${productId}`,
       {
         method: 'DELETE',
+        requiresAuth: true,
       }
     );
   },
@@ -574,7 +621,10 @@ export const api = {
         await request<
           boolean | { inWishlist: boolean }
         >(
-          `/wishlist/${userId}/check/${productId}`
+          `/wishlist/${userId}/check/${productId}`,
+          {
+            requiresAuth: true,
+          }
         );
 
       if (typeof res === 'boolean') {
@@ -611,6 +661,7 @@ export const api = {
       {
         method: 'POST',
         body: JSON.stringify(payload),
+        requiresAuth: true,
       }
     );
   },
@@ -620,7 +671,10 @@ export const api = {
   ): Promise<Order[]> {
     const orders =
       await request<Order[]>(
-        `/orders/user/${userId}`
+        `/orders/user/${userId}`,
+        {
+          requiresAuth: true,
+        }
       );
 
     return Array.isArray(orders)
@@ -632,7 +686,10 @@ export const api = {
     orderId: string | number
   ): Promise<Order> {
     return request<Order>(
-      `/orders/${orderId}`
+      `/orders/${orderId}`,
+      {
+        requiresAuth: true,
+      }
     );
   },
 
@@ -640,7 +697,10 @@ export const api = {
     userId: number
   ): Promise<any> {
     return request(
-      `/orders/user/${userId}/summary`
+      `/orders/user/${userId}/summary`,
+      {
+        requiresAuth: true,
+      }
     );
   },
 
@@ -651,6 +711,7 @@ export const api = {
       `/orders/${orderId}/cancel`,
       {
         method: 'PUT',
+        requiresAuth: true,
       }
     );
   },
@@ -662,7 +723,10 @@ export const api = {
   async getAdminOrders(): Promise<Order[]> {
     const orders =
       await request<Order[]>(
-        '/admin/orders'
+        '/admin/orders',
+        {
+          requiresAuth: true,
+        }
       );
 
     return Array.isArray(orders)
@@ -672,7 +736,10 @@ export const api = {
 
   async getAdminOrderStats(): Promise<OrderStats> {
     return request<OrderStats>(
-      '/admin/orders/stats'
+      '/admin/orders/stats',
+      {
+        requiresAuth: true,
+      }
     );
   },
 
@@ -687,6 +754,7 @@ export const api = {
         body: JSON.stringify({
           status,
         }),
+        requiresAuth: true,
       }
     );
   },
@@ -694,7 +762,10 @@ export const api = {
   async getAdminCustomers(): Promise<Customer[]> {
     const customers =
       await request<Customer[]>(
-        '/admin/customers'
+        '/admin/customers',
+        {
+          requiresAuth: true,
+        }
       );
 
     return Array.isArray(customers)
@@ -709,9 +780,8 @@ export const api = {
       '/admin/products',
       {
         method: 'POST',
-        body: JSON.stringify(
-          productData
-        ),
+        body: JSON.stringify(productData),
+        requiresAuth: true,
       }
     );
   },
@@ -724,9 +794,8 @@ export const api = {
       `/admin/products/${id}`,
       {
         method: 'PUT',
-        body: JSON.stringify(
-          productData
-        ),
+        body: JSON.stringify(productData),
+        requiresAuth: true,
       }
     );
   },
@@ -738,6 +807,7 @@ export const api = {
       `/admin/products/${id}`,
       {
         method: 'DELETE',
+        requiresAuth: true,
       }
     );
   },
