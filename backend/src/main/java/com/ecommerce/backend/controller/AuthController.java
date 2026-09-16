@@ -45,17 +45,10 @@ public class AuthController {
     @Autowired
     private SignupOtpService signupOtpService;
 
-
     // ============================================================
     // INTERNAL HELPERS
     // ============================================================
 
-    /**
-     * Resolves the currently authenticated user from the
-     * Spring Security context.
-     *
-     * Returns null if the user is not authenticated.
-     */
     private User getAuthenticatedUser() {
 
         Authentication auth =
@@ -75,10 +68,6 @@ public class AuthController {
                 .orElse(null);
     }
 
-
-    /**
-     * Builds the profile response returned to the frontend.
-     */
     private Map<String, Object> buildProfileMap(User user) {
 
         Map<String, Object> map =
@@ -114,11 +103,6 @@ public class AuthController {
         return map;
     }
 
-
-    /**
-     * Converts request values into trimmed strings.
-     * Returns null when the value is blank.
-     */
     private String nullOrTrimmed(Object value) {
 
         if (value == null) {
@@ -133,26 +117,13 @@ public class AuthController {
                 : valueString;
     }
 
-
-    /**
-     * Validates a Gmail address.
-     *
-     * Rules:
-     * - Exactly one @
-     * - Domain must be gmail.com
-     * - Username 1-30 characters
-     * - Letters, numbers and periods only
-     * - Cannot start/end with a period
-     * - Cannot contain consecutive periods
-     */
     private boolean isValidGmail(String email) {
 
         if (email == null) {
             return false;
         }
 
-        String value =
-                email.trim();
+        String value = email.trim();
 
         String[] parts =
                 value.split("@", -1);
@@ -161,11 +132,8 @@ public class AuthController {
             return false;
         }
 
-        String username =
-                parts[0];
-
-        String domain =
-                parts[1];
+        String username = parts[0];
+        String domain = parts[1];
 
         if (!domain.equalsIgnoreCase("gmail.com")) {
             return false;
@@ -173,7 +141,6 @@ public class AuthController {
 
         if (username.length() < 1
                 || username.length() > 30) {
-
             return false;
         }
 
@@ -183,7 +150,6 @@ public class AuthController {
 
         if (username.startsWith(".")
                 || username.endsWith(".")) {
-
             return false;
         }
 
@@ -194,7 +160,6 @@ public class AuthController {
         return true;
     }
 
-
     // ============================================================
     // REGISTER
     // POST /api/auth/register
@@ -203,6 +168,16 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<Map<String, Object>>> register(
             @RequestBody Map<String, String> request) {
+
+        if (request == null) {
+            return ResponseEntity
+                    .badRequest()
+                    .body(
+                            ApiResponse.error(
+                                    "Registration request is required"
+                            )
+                    );
+        }
 
         String email =
                 request.get("email");
@@ -216,13 +191,11 @@ public class AuthController {
         String confirmPassword =
                 request.get("confirmPassword");
 
-
         // --------------------------------------------------------
         // Email validation
         // --------------------------------------------------------
 
         if (email == null || email.isBlank()) {
-
             return ResponseEntity
                     .badRequest()
                     .body(
@@ -232,8 +205,9 @@ public class AuthController {
                     );
         }
 
-        if (!isValidGmail(email)) {
+        email = email.trim().toLowerCase();
 
+        if (!isValidGmail(email)) {
             return ResponseEntity
                     .badRequest()
                     .body(
@@ -244,14 +218,13 @@ public class AuthController {
                     );
         }
 
-
         // --------------------------------------------------------
         // Username validation
         // --------------------------------------------------------
 
         if (username == null
                 || !username.trim()
-                        .matches("[A-Za-z0-9._-]{3,30}")) {
+                .matches("[A-Za-z0-9._-]{3,30}")) {
 
             return ResponseEntity
                     .badRequest()
@@ -265,6 +238,7 @@ public class AuthController {
                     );
         }
 
+        username = username.trim();
 
         // --------------------------------------------------------
         // Password validation
@@ -272,8 +246,8 @@ public class AuthController {
 
         if (password == null
                 || !password.matches(
-                        "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)"
-                                + "(?=.*[^A-Za-z0-9]).{8,72}$")) {
+                "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)"
+                        + "(?=.*[^A-Za-z0-9]).{8,72}$")) {
 
             return ResponseEntity
                     .badRequest()
@@ -286,7 +260,6 @@ public class AuthController {
                             )
                     );
         }
-
 
         // --------------------------------------------------------
         // Confirm password
@@ -304,7 +277,6 @@ public class AuthController {
                     );
         }
 
-
         // --------------------------------------------------------
         // Request signup OTP
         // --------------------------------------------------------
@@ -312,8 +284,8 @@ public class AuthController {
         try {
 
             signupOtpService.requestOtp(
-                    email.trim().toLowerCase(),
-                    username.trim(),
+                    email,
+                    username,
                     password
             );
 
@@ -322,7 +294,7 @@ public class AuthController {
 
             data.put(
                     "email",
-                    email.trim().toLowerCase()
+                    email
             );
 
             data.put(
@@ -341,11 +313,28 @@ public class AuthController {
 
         } catch (IllegalStateException e) {
 
+            String message = e.getMessage();
+
+            /*
+             * Only the resend cooldown should return 429.
+             * Email/Brevo failures should not be reported as
+             * "Too Many Requests".
+             */
+            if (message != null
+                    && message.startsWith("Please wait")) {
+
+                return ResponseEntity
+                        .status(HttpStatus.TOO_MANY_REQUESTS)
+                        .body(
+                                ApiResponse.error(message)
+                        );
+            }
+
             return ResponseEntity
-                    .status(HttpStatus.TOO_MANY_REQUESTS)
+                    .status(HttpStatus.BAD_GATEWAY)
                     .body(
                             ApiResponse.error(
-                                    e.getMessage()
+                                    "Unable to send OTP email. Please try again later."
                             )
                     );
 
@@ -358,9 +347,18 @@ public class AuthController {
                                     e.getMessage()
                             )
                     );
+
+        } catch (RuntimeException e) {
+
+            return ResponseEntity
+                    .status(HttpStatus.BAD_GATEWAY)
+                    .body(
+                            ApiResponse.error(
+                                    "Unable to send OTP email. Please try again later."
+                            )
+                    );
         }
     }
-
 
     // ============================================================
     // VERIFY REGISTRATION OTP
@@ -372,12 +370,7 @@ public class AuthController {
     verifyRegistrationOtp(
             @RequestBody VerifyOtpRequest request) {
 
-        // --------------------------------------------------------
-        // Null request validation
-        // --------------------------------------------------------
-
         if (request == null) {
-
             return ResponseEntity
                     .badRequest()
                     .body(
@@ -386,11 +379,6 @@ public class AuthController {
                             )
                     );
         }
-
-
-        // --------------------------------------------------------
-        // Email validation
-        // --------------------------------------------------------
 
         if (request.getEmail() == null
                 || !isValidGmail(request.getEmail())) {
@@ -404,11 +392,6 @@ public class AuthController {
                     );
         }
 
-
-        // --------------------------------------------------------
-        // OTP validation
-        // --------------------------------------------------------
-
         if (request.getOtp() == null
                 || !request.getOtp().matches("\\d{6}")) {
 
@@ -421,11 +404,6 @@ public class AuthController {
                     );
         }
 
-
-        // --------------------------------------------------------
-        // Verify OTP
-        // --------------------------------------------------------
-
         try {
 
             User saved =
@@ -436,50 +414,20 @@ public class AuthController {
                             request.getOtp().trim()
                     );
 
-
-            // ----------------------------------------------------
-            // Generate JWT
-            // ----------------------------------------------------
-
             String token =
                     jwtUtil.generateToken(
                             saved.getEmail(),
                             saved.getRole()
                     );
 
-
-            // ----------------------------------------------------
-            // Response data
-            // ----------------------------------------------------
-
             Map<String, Object> data =
                     new HashMap<>();
 
-            data.put(
-                    "id",
-                    saved.getId()
-            );
-
-            data.put(
-                    "email",
-                    saved.getEmail()
-            );
-
-            data.put(
-                    "username",
-                    saved.getUsername()
-            );
-
-            data.put(
-                    "role",
-                    saved.getRole()
-            );
-
-            data.put(
-                    "token",
-                    token
-            );
-
+            data.put("id", saved.getId());
+            data.put("email", saved.getEmail());
+            data.put("username", saved.getUsername());
+            data.put("role", saved.getRole());
+            data.put("token", token);
 
             return ResponseEntity
                     .status(HttpStatus.CREATED)
@@ -502,7 +450,6 @@ public class AuthController {
         }
     }
 
-
     // ============================================================
     // LOGIN
     // POST /api/auth/login
@@ -512,16 +459,21 @@ public class AuthController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> login(
             @RequestBody Map<String, String> request) {
 
+        if (request == null) {
+            return ResponseEntity
+                    .badRequest()
+                    .body(
+                            ApiResponse.error(
+                                    "Login request is required"
+                            )
+                    );
+        }
+
         String email =
                 request.get("email");
 
         String password =
                 request.get("password");
-
-
-        // --------------------------------------------------------
-        // Required fields
-        // --------------------------------------------------------
 
         if (email == null
                 || email.isBlank()
@@ -537,25 +489,15 @@ public class AuthController {
                     );
         }
 
-
-        // --------------------------------------------------------
-        // Find user
-        // --------------------------------------------------------
+        email = email.trim().toLowerCase();
 
         Optional<User> userOpt =
-                userRepository.findByEmail(
-                        email.trim().toLowerCase()
-                );
-
-
-        // --------------------------------------------------------
-        // Authentication
-        // --------------------------------------------------------
+                userRepository.findByEmail(email);
 
         if (userOpt.isEmpty()
                 || !passwordEncoder.matches(
-                        password,
-                        userOpt.get().getPassword())) {
+                password,
+                userOpt.get().getPassword())) {
 
             return ResponseEntity
                     .status(HttpStatus.UNAUTHORIZED)
@@ -566,14 +508,8 @@ public class AuthController {
                     );
         }
 
-
         User user =
                 userOpt.get();
-
-
-        // --------------------------------------------------------
-        // Generate JWT
-        // --------------------------------------------------------
 
         String token =
                 jwtUtil.generateToken(
@@ -581,39 +517,14 @@ public class AuthController {
                         user.getRole()
                 );
 
-
-        // --------------------------------------------------------
-        // Response
-        // --------------------------------------------------------
-
         Map<String, Object> data =
                 new HashMap<>();
 
-        data.put(
-                "id",
-                user.getId()
-        );
-
-        data.put(
-                "email",
-                user.getEmail()
-        );
-
-        data.put(
-                "username",
-                user.getUsername()
-        );
-
-        data.put(
-                "role",
-                user.getRole()
-        );
-
-        data.put(
-                "token",
-                token
-        );
-
+        data.put("id", user.getId());
+        data.put("email", user.getEmail());
+        data.put("username", user.getUsername());
+        data.put("role", user.getRole());
+        data.put("token", token);
 
         return ResponseEntity
                 .ok(
@@ -623,7 +534,6 @@ public class AuthController {
                         )
                 );
     }
-
 
     // ============================================================
     // FORGOT PASSWORD - GENERATE OTP
@@ -647,12 +557,10 @@ public class AuthController {
                     );
         }
 
-
         boolean sent =
                 forgotPasswordService.generateAndSendOtp(
                         request.getEmail()
                 );
-
 
         if (!sent) {
 
@@ -665,7 +573,6 @@ public class AuthController {
                     );
         }
 
-
         return ResponseEntity
                 .ok(
                         ApiResponse.success(
@@ -674,7 +581,6 @@ public class AuthController {
                         )
                 );
     }
-
 
     // ============================================================
     // RESET PASSWORD
@@ -686,7 +592,6 @@ public class AuthController {
             @RequestBody ResetPasswordRequest request) {
 
         if (request == null) {
-
             return ResponseEntity
                     .badRequest()
                     .body(
@@ -695,7 +600,6 @@ public class AuthController {
                             )
                     );
         }
-
 
         if (request.getEmail() == null
                 || request.getEmail().isBlank()) {
@@ -709,7 +613,6 @@ public class AuthController {
                     );
         }
 
-
         if (request.getOtp() == null
                 || request.getOtp().isBlank()) {
 
@@ -721,7 +624,6 @@ public class AuthController {
                             )
                     );
         }
-
 
         if (request.getNewPassword() == null
                 || request.getNewPassword().isBlank()) {
@@ -735,14 +637,12 @@ public class AuthController {
                     );
         }
 
-
         boolean reset =
                 forgotPasswordService.resetPassword(
                         request.getEmail(),
                         request.getOtp(),
                         request.getNewPassword()
                 );
-
 
         if (!reset) {
 
@@ -755,7 +655,6 @@ public class AuthController {
                     );
         }
 
-
         return ResponseEntity
                 .ok(
                         ApiResponse.success(
@@ -764,7 +663,6 @@ public class AuthController {
                         )
                 );
     }
-
 
     // ============================================================
     // GET PROFILE
@@ -778,9 +676,7 @@ public class AuthController {
         User user =
                 getAuthenticatedUser();
 
-
         if (user == null) {
-
             return ResponseEntity
                     .status(HttpStatus.UNAUTHORIZED)
                     .body(
@@ -790,7 +686,6 @@ public class AuthController {
                     );
         }
 
-
         return ResponseEntity
                 .ok(
                         ApiResponse.success(
@@ -799,7 +694,6 @@ public class AuthController {
                         )
                 );
     }
-
 
     // ============================================================
     // UPDATE PROFILE
@@ -814,9 +708,7 @@ public class AuthController {
         User user =
                 getAuthenticatedUser();
 
-
         if (user == null) {
-
             return ResponseEntity
                     .status(HttpStatus.UNAUTHORIZED)
                     .body(
@@ -826,10 +718,15 @@ public class AuthController {
                     );
         }
 
-
-        // --------------------------------------------------------
-        // Username
-        // --------------------------------------------------------
+        if (request == null) {
+            return ResponseEntity
+                    .badRequest()
+                    .body(
+                            ApiResponse.error(
+                                    "Profile update request is required"
+                            )
+                    );
+        }
 
         if (request.containsKey("username")) {
 
@@ -838,9 +735,7 @@ public class AuthController {
                             request.get("username")
                     );
 
-
             if (newUsername == null) {
-
                 return ResponseEntity
                         .badRequest()
                         .body(
@@ -850,10 +745,9 @@ public class AuthController {
                         );
             }
 
-
             if (!newUsername.equals(user.getUsername())
                     && userRepository
-                            .existsByUsername(newUsername)) {
+                    .existsByUsername(newUsername)) {
 
                 return ResponseEntity
                         .status(HttpStatus.CONFLICT)
@@ -864,19 +758,10 @@ public class AuthController {
                         );
             }
 
-
-            user.setUsername(
-                    newUsername
-            );
+            user.setUsername(newUsername);
         }
 
-
-        // --------------------------------------------------------
-        // Phone number
-        // --------------------------------------------------------
-
         if (request.containsKey("phoneNumber")) {
-
             user.setPhone(
                     nullOrTrimmed(
                             request.get("phoneNumber")
@@ -884,13 +769,7 @@ public class AuthController {
             );
         }
 
-
-        // --------------------------------------------------------
-        // Address
-        // --------------------------------------------------------
-
         if (request.containsKey("address")) {
-
             user.setAddress(
                     nullOrTrimmed(
                             request.get("address")
@@ -898,13 +777,7 @@ public class AuthController {
             );
         }
 
-
-        // --------------------------------------------------------
-        // City
-        // --------------------------------------------------------
-
         if (request.containsKey("city")) {
-
             user.setCity(
                     nullOrTrimmed(
                             request.get("city")
@@ -912,13 +785,7 @@ public class AuthController {
             );
         }
 
-
-        // --------------------------------------------------------
-        // State
-        // --------------------------------------------------------
-
         if (request.containsKey("state")) {
-
             user.setState(
                     nullOrTrimmed(
                             request.get("state")
@@ -926,13 +793,7 @@ public class AuthController {
             );
         }
 
-
-        // --------------------------------------------------------
-        // Country
-        // --------------------------------------------------------
-
         if (request.containsKey("country")) {
-
             user.setCountry(
                     nullOrTrimmed(
                             request.get("country")
@@ -940,13 +801,7 @@ public class AuthController {
             );
         }
 
-
-        // --------------------------------------------------------
-        // ZIP code
-        // --------------------------------------------------------
-
         if (request.containsKey("zipCode")) {
-
             user.setZipCode(
                     nullOrTrimmed(
                             request.get("zipCode")
@@ -954,13 +809,7 @@ public class AuthController {
             );
         }
 
-
-        // --------------------------------------------------------
-        // Profile image
-        // --------------------------------------------------------
-
         if (request.containsKey("profileImage")) {
-
             user.setProfileImage(
                     nullOrTrimmed(
                             request.get("profileImage")
@@ -968,14 +817,8 @@ public class AuthController {
             );
         }
 
-
-        // --------------------------------------------------------
-        // Save
-        // --------------------------------------------------------
-
         User updated =
                 userRepository.save(user);
-
 
         return ResponseEntity
                 .ok(
@@ -985,7 +828,6 @@ public class AuthController {
                         )
                 );
     }
-
 
     // ============================================================
     // CHANGE PASSWORD
@@ -1000,9 +842,7 @@ public class AuthController {
         User user =
                 getAuthenticatedUser();
 
-
         if (user == null) {
-
             return ResponseEntity
                     .status(HttpStatus.UNAUTHORIZED)
                     .body(
@@ -1012,17 +852,21 @@ public class AuthController {
                     );
         }
 
+        if (request == null) {
+            return ResponseEntity
+                    .badRequest()
+                    .body(
+                            ApiResponse.error(
+                                    "Password change request is required"
+                            )
+                    );
+        }
 
         String currentPassword =
                 request.get("currentPassword");
 
         String newPassword =
                 request.get("newPassword");
-
-
-        // --------------------------------------------------------
-        // Required fields
-        // --------------------------------------------------------
 
         if (currentPassword == null
                 || currentPassword.isBlank()
@@ -1039,26 +883,21 @@ public class AuthController {
                     );
         }
 
-
-        // --------------------------------------------------------
-        // New password validation
-        // --------------------------------------------------------
-
-        if (newPassword.length() < 6) {
+        if (!newPassword.matches(
+                "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)"
+                        + "(?=.*[^A-Za-z0-9]).{8,72}$")) {
 
             return ResponseEntity
                     .badRequest()
                     .body(
                             ApiResponse.error(
-                                    "New password must be at least 6 characters"
+                                    "New password must be 8-72 characters "
+                                            + "and include uppercase, "
+                                            + "lowercase, number and "
+                                            + "special character"
                             )
                     );
         }
-
-
-        // --------------------------------------------------------
-        // Verify current password
-        // --------------------------------------------------------
 
         if (!passwordEncoder.matches(
                 currentPassword,
@@ -1073,11 +912,6 @@ public class AuthController {
                     );
         }
 
-
-        // --------------------------------------------------------
-        // Update password
-        // --------------------------------------------------------
-
         user.setPassword(
                 passwordEncoder.encode(
                         newPassword
@@ -1085,7 +919,6 @@ public class AuthController {
         );
 
         userRepository.save(user);
-
 
         return ResponseEntity
                 .ok(
@@ -1095,7 +928,6 @@ public class AuthController {
                         )
                 );
     }
-
 
     // ============================================================
     // DELETE ACCOUNT
@@ -1109,9 +941,7 @@ public class AuthController {
         User user =
                 getAuthenticatedUser();
 
-
         if (user == null) {
-
             return ResponseEntity
                     .status(HttpStatus.UNAUTHORIZED)
                     .body(
@@ -1121,9 +951,7 @@ public class AuthController {
                     );
         }
 
-
         userRepository.delete(user);
-
 
         return ResponseEntity
                 .ok(
