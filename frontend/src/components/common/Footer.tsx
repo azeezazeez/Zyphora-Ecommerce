@@ -28,27 +28,33 @@ export function Footer() {
               </div>
               <div>
                 <p className="font-semibold text-sm text-[#17202A]">Fast Delivery</p>
-                <p className="text-[11px] text-[#8A9199]">Express door-to-door dispatch</p>
+                <p className="text-[11px] text-[#8A9199]">
+                  Express door-to-door dispatch
+                </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-5">
               <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
                 <CreditCard className="w-5 h-5" />
               </div>
               <div>
                 <p className="font-semibold text-sm text-[#17202A]">Cash on Delivery</p>
-                <p className="text-[11px] text-[#8A9199]">Pay when your package arrives</p>
+                <p className="text-[11px] text-[#8A9199]">
+                  Pay when your package arrives
+                </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-5">
               <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
                 <ShieldCheck className="w-5 h-5" />
               </div>
               <div>
                 <p className="font-semibold text-sm text-[#17202A]">100% Genuine</p>
-                <p className="text-[11px] text-[#8A9199]">Authentic verified products</p>
+                <p className="text-[11px] text-[#8A9199]">
+                  Authentic verified products
+                </p>
               </div>
             </div>
           </div>
@@ -57,99 +63,115 @@ export function Footer() {
 
       {/* Main Footer Links */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+          {/* Zyphora */}
           <div>
             <div className="flex items-center gap-2 mb-3">
               <div className="w-6 h-6 rounded bg-indigo-600 flex items-center justify-center text-white font-black text-xs">
                 Z
               </div>
-              <span className="text-base font-extrabold text-[#17202A] tracking-tight">ZYPHORA</span>
+
+              <span className="text-base font-extrabold text-[#17202A] tracking-tight">
+                ZYPHORA
+              </span>
             </div>
+
             <p className="text-xs text-[#5F6368] leading-relaxed mb-4">
-              Your trusted marketplace for electronics, fashion, home goods, and lifestyle essentials.
+              Your trusted marketplace for electronics, fashion, home goods,
+              and lifestyle essentials.
             </p>
+
             <p className="text-[11px] text-[#8A9199]">
-              Engineered with modern web architecture and seamless backend synchronization.
+              Engineered with modern web architecture and seamless backend
+              synchronization.
             </p>
           </div>
 
+          {/* Explore Catalog */}
           <div>
             <h4 className="font-bold text-[#17202A] mb-3 text-xs uppercase tracking-wider">
               Explore Catalog
             </h4>
+
             <ul className="space-y-2">
               <li>
-                <Link to="/shop" className="hover:text-indigo-600 transition-colors">
+                <Link
+                  to="/shop"
+                  className="hover:text-indigo-600 transition-colors"
+                >
                   All Products
                 </Link>
               </li>
+
               <li>
-                <Link to="/shop?category=Electronics" className="hover:text-indigo-600 transition-colors">
+                <Link
+                  to="/shop?category=Electronics"
+                  className="hover:text-indigo-600 transition-colors"
+                >
                   Electronics & Tech
                 </Link>
               </li>
+
               <li>
-                <Link to="/shop?category=Fashion" className="hover:text-indigo-600 transition-colors">
+                <Link
+                  to="/shop?category=Fashion"
+                  className="hover:text-indigo-600 transition-colors"
+                >
                   Fashion & Apparel
                 </Link>
               </li>
+
               <li>
-                <Link to="/shop?category=Home%20%26%20Kitchen" className="hover:text-indigo-600 transition-colors">
+                <Link
+                  to="/shop?category=Home%20%26%20Kitchen"
+                  className="hover:text-indigo-600 transition-colors"
+                >
                   Home & Kitchen
                 </Link>
               </li>
+
               <li>
-                <Link to="/shop?filter=new" className="hover:text-indigo-600 transition-colors">
+                <Link
+                  to="/shop?filter=new"
+                  className="hover:text-indigo-600 transition-colors"
+                >
                   New Arrivals
                 </Link>
               </li>
             </ul>
           </div>
 
+          {/* Customer Care */}
           <div>
             <h4 className="font-bold text-[#17202A] mb-3 text-xs uppercase tracking-wider">
               Customer Care
             </h4>
+
             <ul className="space-y-2">
               <li>
-                <Link to="/profile" className="hover:text-indigo-600 transition-colors">
+                <Link
+                  to="/profile"
+                  className="hover:text-indigo-600 transition-colors"
+                >
                   Your Account Details
                 </Link>
               </li>
-              <li>
-                <Link to="/wishlist" className="hover:text-indigo-600 transition-colors">
-                  Saved Wishlist
-                </Link>
-              </li>
-            </ul>
-          </div>
 
-          <div>
-            <h4 className="font-bold text-[#17202A] mb-3 text-xs uppercase tracking-wider">
-              Zyphora Business
-            </h4>
-            <ul className="space-y-2">
               <li>
-                <Link to="/developer" className="hover:text-indigo-600 transition-colors">
-                  API & Developer Info
-                </Link>
-              </li>
-              <li>
-                <Link to="/privacy" className="hover:text-indigo-600 transition-colors">
-                  Privacy Notice
+                <Link
+                  to="/wishlist"
+                  className="hover:text-indigo-600 transition-colors"
+                >
+                  Saved Wishlist
                 </Link>
               </li>
             </ul>
           </div>
         </div>
 
-        <div className="border-t border-[#E1E5E9] mt-8 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-[#8A9199]">
+        {/* Copyright */}
+        <div className="border-t border-[#E1E5E9] mt-8 pt-6 flex items-center justify-center text-[11px] text-[#8A9199]">
           <p>© 2026 ZYPHORA, Inc. or its affiliates. All rights reserved.</p>
-          <div className="flex items-center gap-4">
-            <Link to="/terms" className="hover:text-[#17202A] transition-colors">Conditions of Use</Link>
-            <Link to="/privacy" className="hover:text-[#17202A] transition-colors">Privacy Notice</Link>
-            <Link to="/security" className="hover:text-[#17202A] transition-colors">Security</Link>
-          </div>
         </div>
       </div>
     </footer>
