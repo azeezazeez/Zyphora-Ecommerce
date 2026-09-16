@@ -262,13 +262,18 @@ export function Header() {
               )}
             </div>
 
-            {/* Orders link (desktop) */}
-            <Link
-              to="/orders"
-              className="hidden lg:flex flex-col text-xs px-2.5 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
-            >
-              <span className="font-semibold text-[#17202A]">Orders</span>
-            </Link>
+           {/* Orders link (desktop) */}
+                 <Link
+                  to="/orders"
+             className="hidden lg:flex items-center justify-center px-4 py-2 rounded-lg 
+             border border-slate-200 bg-white 
+             hover:bg-slate-50 hover:border-slate-300 
+             transition-all duration-200"
+              >
+           <span className="font-semibold text-sm text-[#17202A]">
+                    Orders
+                     </span>
+                     </Link>
 
             {/* Wishlist Link */}
             <Link
