@@ -47,20 +47,22 @@ public class OrderController {
 
     private OrderResponse convertToOrderResponse(Order order) {
 
-        List<OrderItemResponse> itemResponses = new ArrayList<>();
+        List<OrderItemResponse> itemResponses =
+                new ArrayList<>();
 
         if (order.getItems() != null) {
 
-            itemResponses = order.getItems()
-                    .stream()
-                    .map(item -> new OrderItemResponse(
-                            item.getProductId(),
-                            item.getProductName(),
-                            item.getPrice(),
-                            item.getQuantity(),
-                            item.getSubtotal()
-                    ))
-                    .collect(Collectors.toList());
+            itemResponses =
+                    order.getItems()
+                            .stream()
+                            .map(item -> new OrderItemResponse(
+                                    item.getProductId(),
+                                    item.getProductName(),
+                                    item.getPrice(),
+                                    item.getQuantity(),
+                                    item.getSubtotal()
+                            ))
+                            .collect(Collectors.toList());
         }
 
         return new OrderResponse(
@@ -90,9 +92,10 @@ public class OrderController {
             // 1. FIND USER
             // ====================================================
 
-            User user = userRepository
-                    .findById(userId)
-                    .orElse(null);
+            User user =
+                    userRepository
+                            .findById(userId)
+                            .orElse(null);
 
             if (user == null) {
 
@@ -100,7 +103,8 @@ public class OrderController {
                         .status(HttpStatus.NOT_FOUND)
                         .body(
                                 ApiResponse.error(
-                                        "User not found with ID: " + userId
+                                        "User not found with ID: "
+                                                + userId
                                 )
                         );
             }
@@ -126,22 +130,67 @@ public class OrderController {
 
 
             // ====================================================
-            // 3. CREATE NEW ORDER
+            // 3. VALIDATE PAYMENT METHOD
+            // ====================================================
+
+            String paymentMethod = "COD";
+
+            if (request != null
+                    && request.get("paymentMethod") != null
+                    && !request.get("paymentMethod").isBlank()) {
+
+                paymentMethod =
+                        request.get("paymentMethod")
+                                .trim()
+                                .toUpperCase();
+            }
+
+            if (!paymentMethod.equals("COD")
+                    && !paymentMethod.equals("UPI")
+                    && !paymentMethod.equals("CARD")) {
+
+                return ResponseEntity
+                        .status(HttpStatus.BAD_REQUEST)
+                        .body(
+                                ApiResponse.error(
+                                        "Invalid payment method. "
+                                                + "Allowed methods: COD, UPI, CARD"
+                                )
+                        );
+            }
+
+
+            // ====================================================
+            // 4. CREATE NEW ORDER
             // ====================================================
 
             Order order = new Order();
 
             order.setUserId(userId);
-            order.setStatus(OrderStatus.PENDING);
+
+            order.setStatus(
+                    OrderStatus.PENDING
+            );
+
+            /*
+             * Save only the selected payment method.
+             *
+             * IMPORTANT:
+             * Card number, CVV, expiry date, UPI credentials,
+             * or other sensitive payment information are NOT
+             * stored in the Zyphora database.
+             */
+            order.setPaymentMethod(paymentMethod);
 
 
             // ====================================================
-            // 4. CREATE ORDER ITEMS
+            // 5. CREATE ORDER ITEMS
             // ====================================================
 
             Double totalAmount = 0.0;
 
-            List<OrderItem> orderItems = new ArrayList<>();
+            List<OrderItem> orderItems =
+                    new ArrayList<>();
 
 
             for (CartItem cartItem : cartItems) {
@@ -155,7 +204,9 @@ public class OrderController {
                 try {
 
                     productIdLong =
-                            Long.parseLong(cartItem.getProductId());
+                            Long.parseLong(
+                                    cartItem.getProductId()
+                            );
 
                 } catch (NumberFormatException e) {
 
@@ -174,9 +225,10 @@ public class OrderController {
                 // Find product
                 // ------------------------------------------------
 
-                Product product = productRepository
-                        .findById(productIdLong)
-                        .orElse(null);
+                Product product =
+                        productRepository
+                                .findById(productIdLong)
+                                .orElse(null);
 
                 if (product == null) {
 
@@ -243,12 +295,9 @@ public class OrderController {
                 // Create OrderItem
                 // ------------------------------------------------
 
-                OrderItem orderItem = new OrderItem();
+                OrderItem orderItem =
+                        new OrderItem();
 
-                /*
-                 * IMPORTANT:
-                 * Connect this OrderItem to the actual Order.
-                 */
                 orderItem.setOrder(order);
 
                 orderItem.setProductId(
@@ -283,16 +332,20 @@ public class OrderController {
 
 
             // ====================================================
-            // 5. SET ORDER TOTAL & ITEMS
+            // 6. SET ORDER TOTAL & ITEMS
             // ====================================================
 
-            order.setTotalAmount(totalAmount);
+            order.setTotalAmount(
+                    totalAmount
+            );
 
-            order.setItems(orderItems);
+            order.setItems(
+                    orderItems
+            );
 
 
             // ====================================================
-            // 6. SAVE ORDER
+            // 7. SAVE ORDER
             // ====================================================
 
             Order savedOrder =
@@ -300,7 +353,7 @@ public class OrderController {
 
 
             // ====================================================
-            // 7. UPDATE PRODUCT STOCK
+            // 8. UPDATE PRODUCT STOCK
             // ====================================================
 
             for (CartItem cartItem : cartItems) {
@@ -346,24 +399,23 @@ public class OrderController {
 
 
             // ====================================================
-            // 8. CLEAR USER CART
+            // 9. CLEAR USER CART
             // ====================================================
 
-            cartRepository.deleteAllByUserId(userId);
+            cartRepository.deleteAllByUserId(
+                    userId
+            );
 
 
             // ====================================================
-            // 9. SEND ORDER CONFIRMATION EMAIL
+            // 10. SEND ORDER CONFIRMATION EMAIL
             // ====================================================
 
             /*
-             * IMPORTANT:
-             *
              * The order has already been saved and the cart has
              * already been cleared.
              *
-             * If Brevo/email fails, the order should STILL be
-             * considered successful.
+             * If Brevo/email fails, the order remains successful.
              */
 
             try {
@@ -396,7 +448,7 @@ public class OrderController {
 
 
             // ====================================================
-            // 10. RETURN SUCCESS RESPONSE
+            // 11. RETURN SUCCESS RESPONSE
             // ====================================================
 
             return ResponseEntity
@@ -404,7 +456,9 @@ public class OrderController {
                     .body(
                             ApiResponse.success(
                                     "Order placed successfully",
-                                    convertToOrderResponse(savedOrder)
+                                    convertToOrderResponse(
+                                            savedOrder
+                                    )
                             )
                     );
 
@@ -438,10 +492,6 @@ public class OrderController {
 
         try {
 
-            // ----------------------------------------------------
-            // Check user
-            // ----------------------------------------------------
-
             if (!userRepository.existsById(userId)) {
 
                 return ResponseEntity
@@ -454,31 +504,16 @@ public class OrderController {
                         );
             }
 
-
-            // ----------------------------------------------------
-            // Get orders
-            // ----------------------------------------------------
-
             List<Order> orders =
                     orderRepository
                             .findByUserIdOrderByOrderDateDesc(
                                     userId
                             );
 
-
-            // ----------------------------------------------------
-            // Convert to response
-            // ----------------------------------------------------
-
             List<OrderResponse> response =
                     orders.stream()
                             .map(this::convertToOrderResponse)
                             .collect(Collectors.toList());
-
-
-            // ----------------------------------------------------
-            // Return
-            // ----------------------------------------------------
 
             return ResponseEntity
                     .ok(
@@ -532,7 +567,6 @@ public class OrderController {
                     );
         }
 
-
         return ResponseEntity
                 .ok(
                         ApiResponse.success(
@@ -554,10 +588,6 @@ public class OrderController {
     getOrderSummary(
             @PathVariable Long userId) {
 
-        // --------------------------------------------------------
-        // Check user
-        // --------------------------------------------------------
-
         if (!userRepository.existsById(userId)) {
 
             return ResponseEntity
@@ -570,30 +600,15 @@ public class OrderController {
                     );
         }
 
-
-        // --------------------------------------------------------
-        // Order count
-        // --------------------------------------------------------
-
         Integer orderCount =
                 orderRepository.getOrderCountByUserId(
                         userId
                 );
 
-
-        // --------------------------------------------------------
-        // Total spent
-        // --------------------------------------------------------
-
         Double totalSpent =
                 orderRepository.getTotalSpentByUserId(
                         userId
                 );
-
-
-        // --------------------------------------------------------
-        // Recent orders
-        // --------------------------------------------------------
 
         List<OrderHistoryResponse> recentOrderSummaries =
                 orderRepository
@@ -612,11 +627,6 @@ public class OrderController {
                                 )
                         )
                         .collect(Collectors.toList());
-
-
-        // --------------------------------------------------------
-        // Build response
-        // --------------------------------------------------------
 
         Map<String, Object> summary =
                 new HashMap<>();
@@ -640,11 +650,6 @@ public class OrderController {
                 recentOrderSummaries
         );
 
-
-        // --------------------------------------------------------
-        // Return
-        // --------------------------------------------------------
-
         return ResponseEntity
                 .ok(
                         ApiResponse.success(
@@ -666,10 +671,6 @@ public class OrderController {
     cancelOrder(
             @PathVariable String orderId) {
 
-        // --------------------------------------------------------
-        // Find order
-        // --------------------------------------------------------
-
         Order order =
                 orderRepository
                         .findByOrderId(orderId)
@@ -687,11 +688,6 @@ public class OrderController {
                     );
         }
 
-
-        // --------------------------------------------------------
-        // Only PENDING orders can be cancelled
-        // --------------------------------------------------------
-
         if (order.getStatus() != OrderStatus.PENDING) {
 
             return ResponseEntity
@@ -705,27 +701,12 @@ public class OrderController {
                     );
         }
 
-
-        // --------------------------------------------------------
-        // Update status
-        // --------------------------------------------------------
-
         order.setStatus(
                 OrderStatus.CANCELLED
         );
 
-
-        // --------------------------------------------------------
-        // Save
-        // --------------------------------------------------------
-
         Order cancelledOrder =
                 orderRepository.save(order);
-
-
-        // --------------------------------------------------------
-        // Return
-        // --------------------------------------------------------
 
         return ResponseEntity
                 .ok(
