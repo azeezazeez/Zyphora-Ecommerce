@@ -31,24 +31,31 @@ export class ApiError extends Error {
 export function getStoredUser(): User | null {
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
-    if (!raw) return null;
+
+    if (!raw) {
+      return null;
+    }
+
     const user: User = JSON.parse(raw);
-    
+
     // Check if token is expired if JWT contains exp
     if (user.token) {
       const parts = user.token.split('.');
+
       if (parts.length === 3) {
         try {
           const payload = JSON.parse(atob(parts[1]));
+
           if (payload.exp && payload.exp * 1000 < Date.now()) {
             localStorage.removeItem(AUTH_STORAGE_KEY);
             return null;
           }
         } catch {
-          // ignore decoding errors
+          // Ignore JWT decoding errors
         }
       }
     }
+
     return user;
   } catch {
     return null;
@@ -56,7 +63,10 @@ export function getStoredUser(): User | null {
 }
 
 export function saveStoredUser(user: User): void {
-  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+  localStorage.setItem(
+    AUTH_STORAGE_KEY,
+    JSON.stringify(user)
+  );
 }
 
 export function clearStoredUser(): void {
@@ -64,8 +74,14 @@ export function clearStoredUser(): void {
 }
 
 // Core fetch wrapper
-async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+async function request<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const url = `${API_BASE_URL}${
+    endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+  }`;
+
   const currentUser = getStoredUser();
 
   const headers: Record<string, string> = {
@@ -74,11 +90,13 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     ...(options.headers as Record<string, string>),
   };
 
+  // Attach JWT to authenticated requests
   if (currentUser?.token) {
     headers['Authorization'] = `Bearer ${currentUser.token}`;
   }
 
   let response: Response;
+
   try {
     response = await fetch(url, {
       ...options,
@@ -92,16 +110,30 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     );
   }
 
-  // If unauthorized, clear stored credentials
+  /*
+   * Only remove authentication when the backend explicitly
+   * returns 401 Unauthorized.
+   *
+   * A successful profile update will never reach this block.
+   */
   if (response.status === 401) {
     clearStoredUser();
-    window.dispatchEvent(new CustomEvent('zyphora:unauthorized'));
-    throw new ApiError('Session expired. Please sign in again.', 401);
+
+    window.dispatchEvent(
+      new CustomEvent('zyphora:unauthorized')
+    );
+
+    throw new ApiError(
+      'Session expired. Please sign in again.',
+      401
+    );
   }
 
   // Try parsing JSON response
   let json: any = null;
+
   const text = await response.text();
+
   if (text) {
     try {
       json = JSON.parse(text);
@@ -112,13 +144,25 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
   if (!response.ok) {
     const errorMsg =
-      (json && typeof json === 'object' && (json.message || json.error)) ||
+      (json &&
+        typeof json === 'object' &&
+        (json.message || json.error)) ||
       `Request failed with status ${response.status}`;
-    throw new ApiError(errorMsg, response.status, json);
+
+    throw new ApiError(
+      errorMsg,
+      response.status,
+      json
+    );
   }
 
   // Unwrap { success: true, data: T } standard payload if present
-  if (json && typeof json === 'object' && 'data' in json && 'success' in json) {
+  if (
+    json &&
+    typeof json === 'object' &&
+    'data' in json &&
+    'success' in json
+  ) {
     return json.data as T;
   }
 
@@ -129,6 +173,7 @@ export const api = {
   // -------------------------------------------------------------
   // AUTHENTICATION
   // -------------------------------------------------------------
+
   async register(payload: {
     email: string;
     username: string;
@@ -141,25 +186,35 @@ export const api = {
     });
   },
 
-  async verifyOtp(payload: { email: string; otp: string }): Promise<any> {
+  async verifyOtp(payload: {
+    email: string;
+    otp: string;
+  }): Promise<any> {
     return request('/auth/register/verify-otp', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
   },
 
-  async login(payload: { email: string; password: string }): Promise<User> {
+  async login(payload: {
+    email: string;
+    password: string;
+  }): Promise<User> {
     const user = await request<User>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+
     if (user && user.token) {
       saveStoredUser(user);
     }
+
     return user;
   },
 
-  async forgotPasswordGenerateOtp(email: string): Promise<any> {
+  async forgotPasswordGenerateOtp(
+    email: string
+  ): Promise<any> {
     return request('/auth/forgot-password/generate-otp', {
       method: 'POST',
       body: JSON.stringify({ email }),
@@ -178,20 +233,92 @@ export const api = {
     });
   },
 
+  // -------------------------------------------------------------
+  // PROFILE
+  // -------------------------------------------------------------
+
   async getProfile(): Promise<User> {
-    return request<User>('/auth/profile');
+    const profile = await request<User>('/auth/profile');
+
+    /*
+     * The backend profile endpoint may return profile information
+     * without returning the JWT.
+     *
+     * Always preserve the currently stored token.
+     */
+    const currentUser = getStoredUser();
+
+    if (currentUser?.token && profile) {
+      const mergedUser: User = {
+        ...currentUser,
+        ...profile,
+        token: currentUser.token,
+      };
+
+      saveStoredUser(mergedUser);
+
+      return mergedUser;
+    }
+
+    return profile;
   },
 
-  async updateProfile(data: Partial<User>): Promise<User> {
-    const updated = await request<User>('/auth/profile', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-    const current = getStoredUser();
-    if (current) {
-      saveStoredUser({ ...current, ...updated });
+  async updateProfile(
+    data: Partial<User>
+  ): Promise<User> {
+    /*
+     * Get the currently authenticated user BEFORE making
+     * the update request.
+     */
+    const currentUser = getStoredUser();
+
+    if (!currentUser?.token) {
+      throw new ApiError(
+        'Your session has expired. Please sign in again.',
+        401
+      );
     }
-    return updated;
+
+    /*
+     * Send profile update to backend.
+     */
+    const updatedProfile = await request<User>(
+      '/auth/profile',
+      {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }
+    );
+
+    /*
+     * IMPORTANT:
+     *
+     * The backend response may contain only the updated
+     * profile fields and NOT the JWT token.
+     *
+     * Therefore, merge the response with the existing user
+     * and explicitly preserve the existing token.
+     */
+    const updatedUser: User = {
+      ...currentUser,
+      ...updatedProfile,
+      token: currentUser.token,
+    };
+
+    /*
+     * Save the COMPLETE authenticated user.
+     */
+    saveStoredUser(updatedUser);
+
+    /*
+     * IMPORTANT:
+     *
+     * Return updatedUser, NOT updatedProfile.
+     *
+     * This prevents AuthContext from replacing currentUser
+     * with an object that has no JWT token.
+     */
+    return updatedUser;
   },
 
   async changePassword(payload: {
@@ -209,59 +336,137 @@ export const api = {
     const res = await request('/auth/profile', {
       method: 'DELETE',
     });
+
     clearStoredUser();
+
     return res;
   },
 
   // -------------------------------------------------------------
   // PRODUCTS
   // -------------------------------------------------------------
-  async getProducts(params?: { category?: string; search?: string }): Promise<Product[]> {
+
+  async getProducts(params?: {
+    category?: string;
+    search?: string;
+  }): Promise<Product[]> {
     const searchParams = new URLSearchParams();
-    if (params?.category && params.category !== 'All') {
-      searchParams.append('category', params.category);
+
+    if (
+      params?.category &&
+      params.category !== 'All'
+    ) {
+      searchParams.append(
+        'category',
+        params.category
+      );
     }
-    if (params?.search && params.search.trim()) {
-      searchParams.append('search', params.search.trim());
+
+    if (
+      params?.search &&
+      params.search.trim()
+    ) {
+      searchParams.append(
+        'search',
+        params.search.trim()
+      );
     }
+
     const query = searchParams.toString();
-    const endpoint = query ? `/products?${query}` : '/products';
-    const products = await request<Product[]>(endpoint);
-    return Array.isArray(products) ? products : [];
+
+    const endpoint = query
+      ? `/products?${query}`
+      : '/products';
+
+    const products = await request<Product[]>(
+      endpoint
+    );
+
+    return Array.isArray(products)
+      ? products
+      : [];
   },
 
-  async getProductById(id: string | number): Promise<Product> {
-    return request<Product>(`/products/${id}`);
+  async getProductById(
+    id: string | number
+  ): Promise<Product> {
+    return request<Product>(
+      `/products/${id}`
+    );
   },
 
   // -------------------------------------------------------------
   // CART
   // -------------------------------------------------------------
-  async getCart(userId: number): Promise<CartResponse> {
+
+  async getCart(
+    userId: number
+  ): Promise<CartResponse> {
     try {
-      const response = await request<any>(`/cart/${userId}`);
+      const response = await request<any>(
+        `/cart/${userId}`
+      );
+
       if (Array.isArray(response)) {
         return {
           userId,
           items: response,
-          totalQuantity: response.reduce((sum: number, item: any) => sum + (item.quantity || 1), 0),
-          totalPrice: response.reduce((sum: number, item: any) => sum + ((item.price || item.product?.price || 0) * (item.quantity || 1)), 0),
+          totalQuantity: response.reduce(
+            (
+              sum: number,
+              item: any
+            ) =>
+              sum +
+              (item.quantity || 1),
+            0
+          ),
+          totalPrice: response.reduce(
+            (
+              sum: number,
+              item: any
+            ) =>
+              sum +
+              (
+                (
+                  item.price ||
+                  item.product?.price ||
+                  0
+                ) *
+                (item.quantity || 1)
+              ),
+            0
+          ),
         };
       }
+
       return {
         ...response,
-        items: Array.isArray(response?.items) ? response.items : [],
+        items: Array.isArray(
+          response?.items
+        )
+          ? response.items
+          : [],
       };
     } catch (err: any) {
       // If 404 or empty cart
       if (err.status === 404) {
-        return { userId, items: [], totalPrice: 0, totalQuantity: 0 };
+        return {
+          userId,
+          items: [],
+          totalPrice: 0,
+          totalQuantity: 0,
+        };
       }
+
       throw err;
     }
   },
 
-  async addToCart(userId: number, productId: string | number, quantity = 1): Promise<any> {
+  async addToCart(
+    userId: number,
+    productId: string | number,
+    quantity = 1
+  ): Promise<any> {
     return request('/cart/add', {
       method: 'POST',
       body: JSON.stringify({
@@ -272,7 +477,11 @@ export const api = {
     });
   },
 
-  async updateCart(userId: number, productId: string | number, quantity: number): Promise<any> {
+  async updateCart(
+    userId: number,
+    productId: string | number,
+    quantity: number
+  ): Promise<any> {
     return request('/cart/update', {
       method: 'PUT',
       body: JSON.stringify({
@@ -283,32 +492,58 @@ export const api = {
     });
   },
 
-  async removeFromCart(userId: number, productId: string | number): Promise<any> {
-    return request(`/cart/remove/${userId}/${productId}`, {
-      method: 'DELETE',
-    });
+  async removeFromCart(
+    userId: number,
+    productId: string | number
+  ): Promise<any> {
+    return request(
+      `/cart/remove/${userId}/${productId}`,
+      {
+        method: 'DELETE',
+      }
+    );
   },
 
-  async clearCart(userId: number): Promise<any> {
-    return request(`/cart/clear/${userId}`, {
-      method: 'DELETE',
-    });
+  async clearCart(
+    userId: number
+  ): Promise<any> {
+    return request(
+      `/cart/clear/${userId}`,
+      {
+        method: 'DELETE',
+      }
+    );
   },
 
   // -------------------------------------------------------------
   // WISHLIST
   // -------------------------------------------------------------
-  async getWishlist(userId: number): Promise<WishlistItem[]> {
+
+  async getWishlist(
+    userId: number
+  ): Promise<WishlistItem[]> {
     try {
-      const items = await request<WishlistItem[]>(`/wishlist/${userId}`);
-      return Array.isArray(items) ? items : [];
+      const items =
+        await request<WishlistItem[]>(
+          `/wishlist/${userId}`
+        );
+
+      return Array.isArray(items)
+        ? items
+        : [];
     } catch (err: any) {
-      if (err.status === 404) return [];
+      if (err.status === 404) {
+        return [];
+      }
+
       throw err;
     }
   },
 
-  async addToWishlist(userId: number, productId: string | number): Promise<any> {
+  async addToWishlist(
+    userId: number,
+    productId: string | number
+  ): Promise<any> {
     return request('/wishlist/add', {
       method: 'POST',
       body: JSON.stringify({
@@ -318,19 +553,42 @@ export const api = {
     });
   },
 
-  async removeFromWishlist(userId: number, productId: string | number): Promise<any> {
-    return request(`/wishlist/remove/${userId}/${productId}`, {
-      method: 'DELETE',
-    });
+  async removeFromWishlist(
+    userId: number,
+    productId: string | number
+  ): Promise<any> {
+    return request(
+      `/wishlist/remove/${userId}/${productId}`,
+      {
+        method: 'DELETE',
+      }
+    );
   },
 
-  async checkInWishlist(userId: number, productId: string | number): Promise<boolean> {
+  async checkInWishlist(
+    userId: number,
+    productId: string | number
+  ): Promise<boolean> {
     try {
-      const res = await request<boolean | { inWishlist: boolean }>(
-        `/wishlist/${userId}/check/${productId}`
-      );
-      if (typeof res === 'boolean') return res;
-      if (res && typeof res === 'object' && 'inWishlist' in res) return !!res.inWishlist;
+      const res =
+        await request<
+          boolean | { inWishlist: boolean }
+        >(
+          `/wishlist/${userId}/check/${productId}`
+        );
+
+      if (typeof res === 'boolean') {
+        return res;
+      }
+
+      if (
+        res &&
+        typeof res === 'object' &&
+        'inWishlist' in res
+      ) {
+        return !!res.inWishlist;
+      }
+
       return false;
     } catch {
       return false;
@@ -340,76 +598,147 @@ export const api = {
   // -------------------------------------------------------------
   // ORDERS
   // -------------------------------------------------------------
+
   async placeOrder(
     userId: number,
-    payload: { shippingAddress: string; paymentMethod: string }
+    payload: {
+      shippingAddress: string;
+      paymentMethod: string;
+    }
   ): Promise<Order> {
-    return request<Order>(`/orders/place/${userId}`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+    return request<Order>(
+      `/orders/place/${userId}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }
+    );
   },
 
-  async getUserOrders(userId: number): Promise<Order[]> {
-    const orders = await request<Order[]>(`/orders/user/${userId}`);
-    return Array.isArray(orders) ? orders : [];
+  async getUserOrders(
+    userId: number
+  ): Promise<Order[]> {
+    const orders =
+      await request<Order[]>(
+        `/orders/user/${userId}`
+      );
+
+    return Array.isArray(orders)
+      ? orders
+      : [];
   },
 
-  async getOrderById(orderId: string | number): Promise<Order> {
-    return request<Order>(`/orders/${orderId}`);
+  async getOrderById(
+    orderId: string | number
+  ): Promise<Order> {
+    return request<Order>(
+      `/orders/${orderId}`
+    );
   },
 
-  async getUserOrderSummary(userId: number): Promise<any> {
-    return request(`/orders/user/${userId}/summary`);
+  async getUserOrderSummary(
+    userId: number
+  ): Promise<any> {
+    return request(
+      `/orders/user/${userId}/summary`
+    );
   },
 
-  async cancelOrder(orderId: string | number): Promise<any> {
-    return request(`/orders/${orderId}/cancel`, {
-      method: 'PUT',
-    });
+  async cancelOrder(
+    orderId: string | number
+  ): Promise<any> {
+    return request(
+      `/orders/${orderId}/cancel`,
+      {
+        method: 'PUT',
+      }
+    );
   },
 
   // -------------------------------------------------------------
   // ADMIN
   // -------------------------------------------------------------
+
   async getAdminOrders(): Promise<Order[]> {
-    const orders = await request<Order[]>('/admin/orders');
-    return Array.isArray(orders) ? orders : [];
+    const orders =
+      await request<Order[]>(
+        '/admin/orders'
+      );
+
+    return Array.isArray(orders)
+      ? orders
+      : [];
   },
 
   async getAdminOrderStats(): Promise<OrderStats> {
-    return request<OrderStats>('/admin/orders/stats');
+    return request<OrderStats>(
+      '/admin/orders/stats'
+    );
   },
 
-  async updateAdminOrderStatus(orderId: string | number, status: string): Promise<any> {
-    return request(`/admin/orders/${orderId}/status`, {
-      method: 'PUT',
-      body: JSON.stringify({ status }),
-    });
+  async updateAdminOrderStatus(
+    orderId: string | number,
+    status: string
+  ): Promise<any> {
+    return request(
+      `/admin/orders/${orderId}/status`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          status,
+        }),
+      }
+    );
   },
 
   async getAdminCustomers(): Promise<Customer[]> {
-    const customers = await request<Customer[]>('/admin/customers');
-    return Array.isArray(customers) ? customers : [];
+    const customers =
+      await request<Customer[]>(
+        '/admin/customers'
+      );
+
+    return Array.isArray(customers)
+      ? customers
+      : [];
   },
 
-  async createAdminProduct(productData: Partial<Product>): Promise<Product> {
-    return request<Product>('/admin/products', {
-      method: 'POST',
-      body: JSON.stringify(productData),
-    });
+  async createAdminProduct(
+    productData: Partial<Product>
+  ): Promise<Product> {
+    return request<Product>(
+      '/admin/products',
+      {
+        method: 'POST',
+        body: JSON.stringify(
+          productData
+        ),
+      }
+    );
   },
 
-  async updateAdminProduct(id: string | number, productData: Partial<Product>): Promise<Product> {
-    return request<Product>(`/admin/products/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(productData),
-    });
+  async updateAdminProduct(
+    id: string | number,
+    productData: Partial<Product>
+  ): Promise<Product> {
+    return request<Product>(
+      `/admin/products/${id}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(
+          productData
+        ),
+      }
+    );
   },
 
-  async deleteAdminProduct(id: string | number): Promise<any> {
-    return request(`/admin/products/${id}`, {
-      method: 'DELETE',
-    });
+  async deleteAdminProduct(
+    id: string | number
+  ): Promise<any> {
+    return request(
+      `/admin/products/${id}`,
+      {
+        method: 'DELETE',
+      }
+    );
   },
 };
