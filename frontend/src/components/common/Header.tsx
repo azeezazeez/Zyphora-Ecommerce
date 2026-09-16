@@ -14,7 +14,6 @@ import {
   Tag,
   User as UserIcon,
   X,
-  Zap,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
@@ -78,30 +77,6 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-[#E1E5E9] shadow-xs">
-      {/* Top Notice Bar */}
-      <div className="bg-[#17202A] text-white text-xs py-1.5 px-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1 font-semibold text-emerald-400">
-              <Zap className="w-3.5 h-3.5" /> Express Dispatch
-            </span>
-            <span className="hidden sm:inline text-slate-300">| Free delivery on orders over ₹499</span>
-          </div>
-          <div className="flex items-center gap-4 text-slate-300 text-xs">
-            {isAdmin && (
-              <Link
-                to="/admin"
-                className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-0.5 rounded font-medium transition-colors"
-              >
-                <LayoutDashboard className="w-3 h-3" /> Zyphora Admin
-              </Link>
-            )}
-            <Link to="/orders" className="hover:text-white transition-colors">Track Orders</Link>
-            <span className="hidden md:inline hover:text-white cursor-pointer">Support</span>
-          </div>
-        </div>
-      </div>
-
       {/* Main Bar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-3 sm:gap-6">
