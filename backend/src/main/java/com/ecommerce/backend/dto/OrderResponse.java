@@ -12,9 +12,23 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class OrderResponse {
+
     private String orderId;
+
     private LocalDateTime orderDate;
+
     private Double totalAmount;
+
     private OrderStatus status;
+
+    /*
+     * Supported payment methods:
+     *
+     * COD  = Cash on Delivery
+     * UPI  = UPI
+     * CARD = Credit / Debit Card
+     */
+    private String paymentMethod;
+
     private List<OrderItemResponse> items;
 }
