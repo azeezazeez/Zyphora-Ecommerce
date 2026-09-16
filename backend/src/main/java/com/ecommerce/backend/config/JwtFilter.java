@@ -4,10 +4,12 @@ import com.ecommerce.backend.service.JwtUtil;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.MalformedJwtException;
 import io.jsonwebtoken.security.SignatureException;
+
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -26,84 +28,278 @@ public class JwtFilter extends OncePerRequestFilter {
     @Autowired
     private UserDetailsService userDetailsService;
 
+    // ============================================================
+    // FILTER EXCLUSIONS
+    // ============================================================
+
     @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path   = request.getServletPath();
+    protected boolean shouldNotFilter(
+            HttpServletRequest request) {
+
+        String path = request.getServletPath();
         String method = request.getMethod();
 
-        if ("OPTIONS".equalsIgnoreCase(method)) return true;
+        // Always skip CORS preflight requests.
+        if ("OPTIONS".equalsIgnoreCase(method)) {
+            return true;
+        }
 
-        return path.equals("/api/auth/login")
-            || path.equals("/api/auth/register")
-            || path.startsWith("/api/auth/forgot-password")
-            || path.startsWith("/api/products")
-            || path.startsWith("/api/public")
-            || path.startsWith("/api/debug")
-            || path.startsWith("/h2-console")
-            || path.startsWith("/health");
+        // Public authentication endpoints.
+        if (path.equals("/api/auth/login")
+                || path.equals("/api/auth/register")
+                || path.equals("/api/auth/register/verify-otp")
+                || path.startsWith("/api/auth/forgot-password")) {
+            return true;
+        }
+
+        // Public product endpoints.
+        if (path.startsWith("/api/products")) {
+            return true;
+        }
+
+        // Other public endpoints.
+        if (path.startsWith("/api/public")
+                || path.startsWith("/api/debug")
+                || path.startsWith("/h2-console")
+                || path.startsWith("/health")) {
+            return true;
+        }
+
+        return false;
     }
+
+    // ============================================================
+    // JWT PROCESSING
+    // ============================================================
 
     @Override
     protected void doFilterInternal(
             HttpServletRequest request,
             HttpServletResponse response,
-            FilterChain filterChain
-    ) throws ServletException, IOException {
+            FilterChain filterChain)
+            throws ServletException, IOException {
 
-        final String authHeader = request.getHeader("Authorization");
+        String authHeader =
+                request.getHeader("Authorization");
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            sendError(response, "Missing or invalid Authorization header");
+        /*
+         * If there is no Authorization header, do not reject
+         * the request here.
+         *
+         * Spring Security will later decide whether the
+         * requested endpoint requires authentication.
+         */
+        if (authHeader == null
+                || authHeader.isBlank()) {
+
+            filterChain.doFilter(request, response);
             return;
         }
 
-        String jwt = authHeader.substring(7);
+        /*
+         * An Authorization header exists, but it is not
+         * using the expected Bearer scheme.
+         */
+        if (!authHeader.startsWith("Bearer ")) {
+
+            SecurityContextHolder
+                    .clearContext();
+
+            sendError(
+                    response,
+                    "Missing or invalid Authorization header"
+            );
+
+            return;
+        }
+
+        String jwt =
+                authHeader.substring(7).trim();
+
+        if (jwt.isEmpty()) {
+
+            SecurityContextHolder
+                    .clearContext();
+
+            sendError(
+                    response,
+                    "Missing or invalid Authorization header"
+            );
+
+            return;
+        }
 
         try {
-            String userEmail = jwtUtil.extractEmail(jwt);
 
-            if (userEmail == null) {
-                sendError(response, "Invalid token — no subject found");
+            String userEmail =
+                    jwtUtil.extractEmail(jwt);
+
+            if (userEmail == null
+                    || userEmail.isBlank()) {
+
+                SecurityContextHolder
+                        .clearContext();
+
+                sendError(
+                        response,
+                        "Invalid token — no subject found"
+                );
+
                 return;
             }
 
-            if (SecurityContextHolder.getContext().getAuthentication() == null) {
-                UserDetails userDetails = userDetailsService.loadUserByUsername(userEmail);
+            /*
+             * Don't overwrite an authentication that has
+             * already been established.
+             */
+            if (SecurityContextHolder
+                    .getContext()
+                    .getAuthentication() == null) {
 
-                if (jwtUtil.validateToken(jwt, userEmail)) {
-                    UsernamePasswordAuthenticationToken authToken =
-                        new UsernamePasswordAuthenticationToken(
-                            userDetails,
-                            null,
-                            userDetails.getAuthorities()
-                        );
-                    authToken.setDetails(
-                        new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authToken);
-                } else {
-                    sendError(response, "Token validation failed");
+                UserDetails userDetails =
+                        userDetailsService
+                                .loadUserByUsername(userEmail);
+
+                if (userDetails == null) {
+
+                    SecurityContextHolder
+                            .clearContext();
+
+                    sendError(
+                            response,
+                            "User not found"
+                    );
+
                     return;
                 }
+
+                boolean valid =
+                        jwtUtil.validateToken(
+                                jwt,
+                                userEmail
+                        );
+
+                if (!valid) {
+
+                    SecurityContextHolder
+                            .clearContext();
+
+                    sendError(
+                            response,
+                            "Token validation failed"
+                    );
+
+                    return;
+                }
+
+                UsernamePasswordAuthenticationToken authToken =
+                        new UsernamePasswordAuthenticationToken(
+                                userDetails,
+                                null,
+                                userDetails.getAuthorities()
+                        );
+
+                authToken.setDetails(
+                        new WebAuthenticationDetailsSource()
+                                .buildDetails(request)
+                );
+
+                SecurityContextHolder
+                        .getContext()
+                        .setAuthentication(authToken);
             }
 
         } catch (ExpiredJwtException e) {
-            sendError(response, "Token expired");
+
+            SecurityContextHolder
+                    .clearContext();
+
+            sendError(
+                    response,
+                    "Token expired"
+            );
+
             return;
-        } catch (MalformedJwtException | SignatureException e) {
-            sendError(response, "Invalid token");
+
+        } catch (MalformedJwtException
+                 | SignatureException e) {
+
+            SecurityContextHolder
+                    .clearContext();
+
+            sendError(
+                    response,
+                    "Invalid token"
+            );
+
             return;
+
         } catch (Exception e) {
-            System.err.println("JWT auth failed: " + e.getClass().getSimpleName() + " — " + e.getMessage());
-            sendError(response, "Authentication failed");
+
+            SecurityContextHolder
+                    .clearContext();
+
+            System.err.println(
+                    "JWT authentication failed: "
+                            + e.getClass().getSimpleName()
+                            + " — "
+                            + e.getMessage()
+            );
+
+            sendError(
+                    response,
+                    "Authentication failed"
+            );
+
             return;
         }
 
-        filterChain.doFilter(request, response);
+        filterChain.doFilter(
+                request,
+                response
+        );
     }
 
-    private void sendError(HttpServletResponse response, String message) throws IOException {
-        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-        response.setContentType("application/json");
-        response.getWriter().write("{\"error\": \"" + message + "\"}");
+    // ============================================================
+    // ERROR RESPONSE
+    // ============================================================
+
+    private void sendError(
+            HttpServletResponse response,
+            String message)
+            throws IOException {
+
+        if (response.isCommitted()) {
+            return;
+        }
+
+        response.setStatus(
+                HttpServletResponse.SC_UNAUTHORIZED
+        );
+
+        response.setContentType(
+                "application/json"
+        );
+
+        response.setCharacterEncoding(
+                "UTF-8"
+        );
+
+        String safeMessage =
+                message == null
+                        ? "Authentication failed"
+                        : message
+                                .replace("\\", "\\\\")
+                                .replace("\"", "\\\"");
+
+        response.getWriter().write(
+                "{"
+                        + "\"success\":false,"
+                        + "\"message\":\""
+                        + safeMessage
+                        + "\","
+                        + "\"data\":null"
+                        + "}"
+        );
     }
 }
