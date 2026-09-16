@@ -4,66 +4,90 @@ import { ArrowUp, CreditCard, ShieldCheck, Truck } from 'lucide-react';
 
 export function Footer() {
   const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    });
   };
 
   return (
     <footer className="bg-white border-t border-[#E1E5E9] text-xs text-[#5F6368] mt-16">
-      {/* Back to top banner */}
+
+      {/* Back to Top */}
       <button
         id="footer-back-to-top-btn"
         onClick={scrollToTop}
-        className="w-full py-3 bg-[#F8F9FA] hover:bg-slate-200 text-[#17202A] text-xs font-semibold text-center transition-colors flex items-center justify-center gap-1 border-b border-[#E1E5E9]"
+        className="w-full py-4 bg-[#F8F9FA] hover:bg-slate-100 text-[#17202A] text-xs font-semibold text-center transition-colors flex items-center justify-center gap-1.5 border-b border-[#E1E5E9]"
       >
-        <ArrowUp className="w-3.5 h-3.5" /> Back to Top
+        <ArrowUp className="w-3.5 h-3.5" />
+        <span>Back to Top</span>
       </button>
 
-      {/* Trust & Guarantees bar */}
+      {/* Trust & Guarantees */}
       <div className="border-b border-[#E1E5E9] bg-slate-50/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+        <div className="max-w-6xl mx-auto px-6 sm:px-8 lg:px-10 py-8">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 sm:gap-10 lg:gap-16">
+
+            {/* Fast Delivery */}
+            <div className="flex items-center gap-4">
+              <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
                 <Truck className="w-5 h-5" />
               </div>
-              <div>
-                <p className="font-semibold text-sm text-[#17202A]">Fast Delivery</p>
-                <p className="text-[11px] text-[#8A9199]">
+
+              <div className="min-w-0">
+                <p className="font-semibold text-sm text-[#17202A]">
+                  Fast Delivery
+                </p>
+
+                <p className="text-[11px] text-[#8A9199] mt-0.5 whitespace-nowrap">
                   Express door-to-door dispatch
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-5">
-              <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+            {/* Cash on Delivery */}
+            <div className="flex items-center gap-4">
+              <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
                 <CreditCard className="w-5 h-5" />
               </div>
-              <div>
-                <p className="font-semibold text-sm text-[#17202A]">Cash on Delivery</p>
-                <p className="text-[11px] text-[#8A9199]">
+
+              <div className="min-w-0">
+                <p className="font-semibold text-sm text-[#17202A]">
+                  Cash on Delivery
+                </p>
+
+                <p className="text-[11px] text-[#8A9199] mt-0.5 whitespace-nowrap">
                   Pay when your package arrives
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-5">
-              <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+            {/* 100% Genuine */}
+            <div className="flex items-center gap-4">
+              <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
                 <ShieldCheck className="w-5 h-5" />
               </div>
-              <div>
-                <p className="font-semibold text-sm text-[#17202A]">100% Genuine</p>
-                <p className="text-[11px] text-[#8A9199]">
+
+              <div className="min-w-0">
+                <p className="font-semibold text-sm text-[#17202A]">
+                  100% Genuine
+                </p>
+
+                <p className="text-[11px] text-[#8A9199] mt-0.5 whitespace-nowrap">
                   Authentic verified products
                 </p>
               </div>
             </div>
+
           </div>
         </div>
       </div>
 
-      {/* Main Footer Links */}
+      {/* Main Footer */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-10 lg:gap-16">
+
           {/* Zyphora */}
           <div>
             <div className="flex items-center gap-2 mb-3">
@@ -81,7 +105,7 @@ export function Footer() {
               and lifestyle essentials.
             </p>
 
-            <p className="text-[11px] text-[#8A9199]">
+            <p className="text-[11px] text-[#8A9199] leading-relaxed">
               Engineered with modern web architecture and seamless backend
               synchronization.
             </p>
@@ -93,7 +117,8 @@ export function Footer() {
               Explore Catalog
             </h4>
 
-            <ul className="space-y-2">
+            <ul className="space-y-2.5">
+
               <li>
                 <Link
                   to="/shop"
@@ -138,6 +163,7 @@ export function Footer() {
                   New Arrivals
                 </Link>
               </li>
+
             </ul>
           </div>
 
@@ -147,7 +173,8 @@ export function Footer() {
               Customer Care
             </h4>
 
-            <ul className="space-y-2">
+            <ul className="space-y-2.5">
+
               <li>
                 <Link
                   to="/profile"
@@ -165,14 +192,19 @@ export function Footer() {
                   Saved Wishlist
                 </Link>
               </li>
+
             </ul>
           </div>
+
         </div>
 
         {/* Copyright */}
-        <div className="border-t border-[#E1E5E9] mt-8 pt-6 flex items-center justify-center text-[11px] text-[#8A9199]">
-          <p>© 2026 ZYPHORA, Inc. or its affiliates. All rights reserved.</p>
+        <div className="border-t border-[#E1E5E9] mt-10 pt-6 flex items-center justify-center text-[11px] text-[#8A9199] text-center">
+          <p>
+            © 2026 ZYPHORA, Inc. or its affiliates. All rights reserved.
+          </p>
         </div>
+
       </div>
     </footer>
   );
