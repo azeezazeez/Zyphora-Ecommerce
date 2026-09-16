@@ -9,7 +9,6 @@ import org.springframework.stereotype.Service;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -27,42 +26,41 @@ public class SignupOtpService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
-    /*
-     * Temporary OTP registrations.
-     *
-     * This data remains in memory until:
-     * - OTP is successfully verified
-     * - OTP expires
-     * - sending the email fails
-     * - the application restarts
-     */
     private final Map<String, PendingRegistration> pending =
             new ConcurrentHashMap<>();
 
-    // ============================================================
-    // REQUEST SIGNUP OTP
-    // ============================================================
-
+    /**
+     * Generates and sends an OTP for a new registration.
+     */
     public void requestOtp(
             String email,
             String username,
             String password) {
 
-        validateSignupInput(
-                email,
-                username,
-                password
-        );
+        if (email == null || email.trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Email is required"
+            );
+        }
+
+        if (username == null || username.trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Username is required"
+            );
+        }
+
+        if (password == null || password.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Password is required"
+            );
+        }
 
         String normalizedEmail =
-                normalizeEmail(email);
+                email.trim().toLowerCase();
 
         String normalizedUsername =
                 username.trim();
 
-        /*
-         * Check whether the account already exists.
-         */
         if (userRepository.existsByEmail(normalizedEmail)) {
             throw new IllegalArgumentException(
                     "Email already registered"
@@ -78,9 +76,6 @@ public class SignupOtpService {
         LocalDateTime now =
                 LocalDateTime.now();
 
-        /*
-         * Prevent OTP spam.
-         */
         PendingRegistration existing =
                 pending.get(normalizedEmail);
 
@@ -108,19 +103,12 @@ public class SignupOtpService {
             }
         }
 
-        /*
-         * Generate a secure six-digit OTP.
-         */
         String otp =
                 String.format(
-                        Locale.ROOT,
                         "%06d",
                         RANDOM.nextInt(1_000_000)
                 );
 
-        /*
-         * Encode the password before storing it temporarily.
-         */
         String encodedPassword =
                 passwordEncoder.encode(password);
 
@@ -138,9 +126,8 @@ public class SignupOtpService {
                 );
 
         /*
-         * Store registration BEFORE sending email.
-         *
-         * If sending fails, it will be removed below.
+         * Store the registration before sending the email.
+         * If email delivery fails, it will be removed below.
          */
         pending.put(
                 normalizedEmail,
@@ -155,73 +142,89 @@ public class SignupOtpService {
                     normalizedUsername
             );
 
-            /*
-             * Do not log the OTP itself.
-             */
             System.out.println(
-                    "Signup OTP email request completed for: "
+                    "Zyphora: Signup OTP email request completed for "
                             + normalizedEmail
             );
 
-        } catch (Exception exception) {
+        } catch (RuntimeException ex) {
 
             /*
-             * Remove the temporary registration because
-             * the user did not receive a usable OTP.
+             * Email failed, therefore the pending registration
+             * must not remain active.
              */
             pending.remove(
                     normalizedEmail
             );
 
             /*
-             * Log the actual exception on Render.
-             *
              * IMPORTANT:
-             * We never log passwords or API keys.
+             *
+             * Do NOT hide the original exception.
+             *
+             * EmailService already contains the actual Brevo
+             * HTTP response and connection diagnostics.
+             *
+             * Keeping the original exception as the cause allows
+             * AuthController/Render logs to expose the real problem.
              */
             System.err.println(
                     "================================================"
             );
 
             System.err.println(
-                    "SIGNUP OTP EMAIL FAILED"
+                    "ZYPHORA SIGNUP OTP EMAIL FAILED"
             );
 
             System.err.println(
-                    "Recipient: "
+                    "Email: "
                             + normalizedEmail
             );
 
             System.err.println(
-                    "Exception type: "
-                            + exception.getClass().getName()
+                    "Error type: "
+                            + ex.getClass().getName()
             );
 
             System.err.println(
-                    "Exception message: "
-                            + exception.getMessage()
+                    "Error message: "
+                            + ex.getMessage()
             );
+
+            if (ex.getCause() != null) {
+
+                System.err.println(
+                        "Cause type: "
+                                + ex.getCause()
+                                        .getClass()
+                                        .getName()
+                );
+
+                System.err.println(
+                        "Cause message: "
+                                + ex.getCause()
+                                        .getMessage()
+                );
+            }
 
             System.err.println(
                     "================================================"
             );
 
             /*
-             * Preserve useful diagnostic information instead
-             * of hiding the original exception.
+             * Preserve the actual exception.
+             *
+             * AuthController can convert it to the appropriate
+             * HTTP response while the Render logs retain the
+             * original Brevo error.
              */
-            throw new IllegalStateException(
-                    "Unable to send OTP email: "
-                            + safeMessage(exception),
-                    exception
-            );
+            throw ex;
         }
     }
 
-    // ============================================================
-    // VERIFY OTP
-    // ============================================================
-
+    /**
+     * Verifies the OTP and creates the user account.
+     */
     public User verifyOtp(
             String email,
             String otp) {
@@ -239,16 +242,10 @@ public class SignupOtpService {
         }
 
         String normalizedEmail =
-                normalizeEmail(email);
+                email.trim().toLowerCase();
 
         String normalizedOtp =
                 otp.trim();
-
-        if (!normalizedOtp.matches("\\d{6}")) {
-            throw new IllegalArgumentException(
-                    "OTP must be exactly 6 digits"
-            );
-        }
 
         PendingRegistration registration =
                 pending.get(normalizedEmail);
@@ -262,9 +259,6 @@ public class SignupOtpService {
         LocalDateTime now =
                 LocalDateTime.now();
 
-        /*
-         * OTP expiry check.
-         */
         if (registration.expiry().isBefore(now)) {
 
             pending.remove(
@@ -276,10 +270,8 @@ public class SignupOtpService {
             );
         }
 
-        /*
-         * Maximum invalid attempts.
-         */
-        if (registration.attempts() >= MAX_ATTEMPTS) {
+        if (registration.attempts()
+                >= MAX_ATTEMPTS) {
 
             pending.remove(
                     normalizedEmail
@@ -290,10 +282,8 @@ public class SignupOtpService {
             );
         }
 
-        /*
-         * OTP comparison.
-         */
-        if (!registration.otp().equals(normalizedOtp)) {
+        if (!registration.otp()
+                .equals(normalizedOtp)) {
 
             pending.computeIfPresent(
                     normalizedEmail,
@@ -309,10 +299,11 @@ public class SignupOtpService {
         }
 
         /*
-         * Double-check that another request did not register
-         * this email while the OTP was pending.
+         * Double-check that the email and username were not
+         * registered while the OTP was pending.
          */
-        if (userRepository.existsByEmail(normalizedEmail)) {
+        if (userRepository.existsByEmail(
+                normalizedEmail)) {
 
             pending.remove(
                     normalizedEmail
@@ -324,8 +315,7 @@ public class SignupOtpService {
         }
 
         if (userRepository.existsByUsername(
-                registration.username()
-        )) {
+                registration.username())) {
 
             pending.remove(
                     normalizedEmail
@@ -336,9 +326,6 @@ public class SignupOtpService {
             );
         }
 
-        /*
-         * Create the actual user account.
-         */
         User user =
                 new User();
 
@@ -356,8 +343,8 @@ public class SignupOtpService {
 
         /*
          * Preserve the existing application behavior:
-         * first registered user = ADMIN
-         * subsequent users = USER
+         * first registered user becomes ADMIN,
+         * subsequent users become USER.
          */
         user.setRole(
                 userRepository.count() == 0
@@ -368,9 +355,6 @@ public class SignupOtpService {
         User savedUser =
                 userRepository.save(user);
 
-        /*
-         * OTP can no longer be reused.
-         */
         pending.remove(
                 normalizedEmail
         );
@@ -378,103 +362,9 @@ public class SignupOtpService {
         return savedUser;
     }
 
-    // ============================================================
-    // VALIDATION
-    // ============================================================
-
-    private void validateSignupInput(
-            String email,
-            String username,
-            String password) {
-
-        if (email == null || email.trim().isEmpty()) {
-            throw new IllegalArgumentException(
-                    "Email is required"
-            );
-        }
-
-        if (username == null || username.trim().isEmpty()) {
-            throw new IllegalArgumentException(
-                    "Username is required"
-            );
-        }
-
-        if (password == null || password.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "Password is required"
-            );
-        }
-
-        String normalizedEmail =
-                normalizeEmail(email);
-
-        if (!isValidEmail(normalizedEmail)) {
-            throw new IllegalArgumentException(
-                    "Please provide a valid email address"
-            );
-        }
-
-        if (username.trim().length() < 3) {
-            throw new IllegalArgumentException(
-                    "Username must be at least 3 characters"
-            );
-        }
-
-        if (password.length() < 8) {
-            throw new IllegalArgumentException(
-                    "Password must be at least 8 characters"
-            );
-        }
-    }
-
-    // ============================================================
-    // HELPERS
-    // ============================================================
-
-    private String normalizeEmail(
-            String email) {
-
-        return email
-                .trim()
-                .toLowerCase(Locale.ROOT);
-    }
-
-    private boolean isValidEmail(
-            String email) {
-
-        return email != null
-                && email.matches(
-                "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
-        );
-    }
-
-    private String safeMessage(
-            Exception exception) {
-
-        if (exception.getMessage() == null
-                || exception.getMessage().isBlank()) {
-
-            return "Unknown email service error";
-        }
-
-        String message =
-                exception.getMessage()
-                        .replace("\r", " ")
-                        .replace("\n", " ")
-                        .trim();
-
-        if (message.length() > 1000) {
-            return message.substring(0, 1000)
-                    + "...";
-        }
-
-        return message;
-    }
-
-    // ============================================================
-    // PENDING REGISTRATION
-    // ============================================================
-
+    /**
+     * Temporary registration data stored until OTP verification.
+     */
     private record PendingRegistration(
             String email,
             String username,
