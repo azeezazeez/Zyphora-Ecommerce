@@ -1,6 +1,6 @@
-# 🛒 ZYPHORA – Full Stack E-Commerce Web Application
-
 <div align="center">
+
+# 🛒 ZYPHORA – Full Stack E-Commerce Web Application
 
 ### 🛍️ Seamless Shopping • 🔐 Secure Authentication • ⚡ Scalable Backend
 
@@ -8,7 +8,7 @@
 
 <br>
 
-🌐 **Live Demo:** https://cartify-cart.vercel.app
+🌐 **Live Demo:** https://zyphora-cart.vercel.app
 
 ⏳ *Note: initial load may take 5 - 10 seconds to load*
 
