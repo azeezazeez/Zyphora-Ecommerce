@@ -71,6 +71,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(Arrays.asList(
+            "https://zyphora-cart.vercel.app",
             "https://cartify-cart.vercel.app",
             "http://localhost:3000",
             "http://localhost:5173",
