@@ -2,6 +2,8 @@ package com.ecommerce.backend.service;
 
 import com.ecommerce.backend.entity.Order;
 import com.ecommerce.backend.entity.OrderItem;
+import com.ecommerce.backend.entity.OrderStatus;
+import com.ecommerce.backend.entity.User;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -129,6 +131,85 @@ public class EmailService {
         sendEmail(
                 toEmail,
                 recipientName,
+                subject,
+                html
+        );
+    }
+
+
+    // ============================================================
+    // ORDER STATUS UPDATE EMAIL
+    // ============================================================
+
+    public void sendOrderStatusUpdateEmail(
+            Order order,
+            User user,
+            OrderStatus oldStatus,
+            OrderStatus newStatus) {
+
+        if (order == null) {
+            throw new IllegalArgumentException("Order cannot be null.");
+        }
+
+        if (user == null) {
+            throw new IllegalArgumentException("User cannot be null.");
+        }
+
+        if (newStatus == null) {
+            throw new IllegalArgumentException(
+                    "New order status cannot be null."
+            );
+        }
+
+        // Do not send an email if the status did not actually change.
+        if (oldStatus == newStatus) {
+            return;
+        }
+
+        String toEmail = user.getEmail();
+
+        if (toEmail == null || toEmail.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Customer email cannot be empty."
+            );
+        }
+
+        String username =
+                user.getUsername() == null || user.getUsername().isBlank()
+                        ? "Zyphora Customer"
+                        : user.getUsername().trim();
+
+        String orderNumber =
+                order.getOrderId() != null
+                        && !order.getOrderId().isBlank()
+                        ? order.getOrderId()
+                        : String.valueOf(order.getId());
+
+        String subject = switch (newStatus) {
+            case PENDING ->
+                    "Order Status Updated - " + orderNumber;
+            case CONFIRMED ->
+                    "Order Confirmed - " + orderNumber;
+            case PROCESSING ->
+                    "Order Processing - " + orderNumber;
+            case SHIPPED ->
+                    "Order Shipped - " + orderNumber;
+            case DELIVERED ->
+                    "Order Delivered - " + orderNumber;
+            case CANCELLED ->
+                    "Order Cancelled - " + orderNumber;
+        };
+
+        String html =
+                buildOrderStatusUpdateEmail(
+                        username,
+                        order,
+                        newStatus
+                );
+
+        sendEmail(
+                toEmail,
+                username,
                 subject,
                 html
         );
@@ -740,6 +821,573 @@ public class EmailService {
                 """
                 .replace("{{APP_NAME}}", safeAppName)
                 .replace("{{OTP}}", safeOtp);
+    }
+
+
+    // ============================================================
+    // ORDER STATUS UPDATE EMAIL TEMPLATE
+    // ============================================================
+
+    private String buildOrderStatusUpdateEmail(
+            String username,
+            Order order,
+            OrderStatus status) {
+
+        String safeUsername =
+                escapeHtml(username);
+
+        String orderNumber =
+                order.getOrderId() != null
+                        && !order.getOrderId().isBlank()
+                        ? order.getOrderId()
+                        : String.valueOf(order.getId());
+
+        String safeOrderNumber =
+                escapeHtml(orderNumber);
+
+        String safeAppName =
+                escapeHtml(getSafeAppName());
+
+        String orderDate = "N/A";
+
+        if (order.getOrderDate() != null) {
+
+            DateTimeFormatter formatter =
+                    DateTimeFormatter.ofPattern(
+                            "dd MMM yyyy, hh:mm a",
+                            Locale.ENGLISH
+                    );
+
+            orderDate =
+                    order.getOrderDate().format(formatter);
+        }
+
+        String safeOrderDate =
+                escapeHtml(orderDate);
+
+        String statusLabel = switch (status) {
+            case PENDING -> "Order Pending";
+            case CONFIRMED -> "Order Confirmed";
+            case PROCESSING -> "Order Processing";
+            case SHIPPED -> "Order Shipped";
+            case DELIVERED -> "Order Delivered";
+            case CANCELLED -> "Order Cancelled";
+        };
+
+        String statusMessage = switch (status) {
+            case PENDING ->
+                    "Your order is currently pending.";
+
+            case CONFIRMED ->
+                    "Your order has been confirmed and is now being prepared.";
+
+            case PROCESSING ->
+                    "Your order is currently being prepared for dispatch.";
+
+            case SHIPPED ->
+                    "Great news! Your order has been shipped and is on its way.";
+
+            case DELIVERED ->
+                    "Your order has been delivered successfully. Thank you for shopping with us.";
+
+            case CANCELLED ->
+                    "Your order has been cancelled successfully. If you did not request this cancellation, please contact Zyphora support.";
+        };
+
+        String paymentMethod =
+                order.getPaymentMethod() != null
+                        ? order.getPaymentMethod()
+                                .trim()
+                                .toUpperCase(Locale.ROOT)
+                        : "COD";
+
+        String paymentLabel = switch (paymentMethod) {
+            case "UPI" -> "UPI";
+            case "CARD" -> "Credit / Debit Card";
+            default -> "Cash on Delivery";
+        };
+
+        double total =
+                order.getTotalAmount() != null
+                        ? order.getTotalAmount()
+                        : 0.0;
+
+        String formattedTotal =
+                String.format(
+                        Locale.ENGLISH,
+                        "%.2f",
+                        total
+                );
+
+        StringBuilder itemsHtml =
+                new StringBuilder();
+
+        if (order.getItems() != null
+                && !order.getItems().isEmpty()) {
+
+            for (OrderItem item : order.getItems()) {
+
+                String productName =
+                        item.getProductName() != null
+                                ? item.getProductName()
+                                : "Product";
+
+                int quantity =
+                        item.getQuantity() != null
+                                ? item.getQuantity()
+                                : 0;
+
+                double subtotal =
+                        item.getSubtotal() != null
+                                ? item.getSubtotal()
+                                : (
+                                    item.getPrice() != null
+                                            ? item.getPrice() * quantity
+                                            : 0.0
+                                );
+
+                itemsHtml
+                        .append("""
+                                <tr>
+                                    <td style="
+                                        padding:14px 8px;
+                                        border-bottom:1px solid #edf1f7;
+                                        color:#172033;
+                                        font-size:14px;
+                                        line-height:1.5;
+                                        word-break:break-word;
+                                    ">
+                                """)
+                        .append(escapeHtml(productName))
+                        .append("""
+                                    </td>
+
+                                    <td style="
+                                        padding:14px 8px;
+                                        border-bottom:1px solid #edf1f7;
+                                        text-align:center;
+                                        color:#667085;
+                                        font-size:14px;
+                                    ">
+                                """)
+                        .append(quantity)
+                        .append("""
+                                    </td>
+
+                                    <td style="
+                                        padding:14px 8px;
+                                        border-bottom:1px solid #edf1f7;
+                                        text-align:right;
+                                        color:#172033;
+                                        font-size:14px;
+                                        font-weight:600;
+                                        white-space:nowrap;
+                                    ">
+                                        ₹
+                                """)
+                        .append(
+                                String.format(
+                                        Locale.ENGLISH,
+                                        "%.2f",
+                                        subtotal
+                                )
+                        )
+                        .append("""
+                                    </td>
+                                </tr>
+                                """);
+            }
+
+        } else {
+
+            itemsHtml.append("""
+                    <tr>
+                        <td colspan="3" style="
+                            padding:20px 10px;
+                            text-align:center;
+                            color:#94a3b8;
+                            font-size:13px;
+                        ">
+                            Order items unavailable
+                        </td>
+                    </tr>
+                    """);
+        }
+
+        return """
+                <!DOCTYPE html>
+                <html>
+
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport"
+                          content="width=device-width, initial-scale=1.0">
+                    <title>{{STATUS_LABEL}} - {{ORDER_ID}}</title>
+                </head>
+
+                <body style="
+                    margin:0;
+                    padding:0;
+                    background:#f3f6fa;
+                    font-family:Arial,Helvetica,sans-serif;
+                    color:#172033;
+                ">
+
+                    <div style="
+                        width:100%;
+                        padding:28px 12px;
+                        box-sizing:border-box;
+                    ">
+
+                        <div style="
+                            max-width:620px;
+                            margin:0 auto;
+                            background:#ffffff;
+                            border:1px solid #e5e9f0;
+                            border-radius:20px;
+                            overflow:hidden;
+                        ">
+
+                            <div style="
+                                padding:28px 24px;
+                                background:#111827;
+                            ">
+
+                                <div style="
+                                    color:#ffffff;
+                                    font-size:26px;
+                                    line-height:1;
+                                    font-weight:800;
+                                ">
+                                    {{APP_NAME}}
+                                </div>
+
+                                <div style="
+                                    margin-top:8px;
+                                    color:#9ca3af;
+                                    font-size:11px;
+                                    line-height:1.4;
+                                    letter-spacing:2px;
+                                    text-transform:uppercase;
+                                ">
+                                    Order Update
+                                </div>
+
+                            </div>
+
+                            <div style="
+                                padding:30px 24px;
+                            ">
+
+                                <div style="
+                                    width:54px;
+                                    height:54px;
+                                    line-height:54px;
+                                    text-align:center;
+                                    background:#eef2ff;
+                                    border-radius:16px;
+                                    color:#4f46e5;
+                                    font-size:27px;
+                                    font-weight:800;
+                                ">
+                                    ✓
+                                </div>
+
+                                <h1 style="
+                                    margin:20px 0 10px;
+                                    color:#111827;
+                                    font-size:25px;
+                                    line-height:1.3;
+                                ">
+                                    {{STATUS_LABEL}}
+                                </h1>
+
+                                <p style="
+                                    margin:0;
+                                    color:#667085;
+                                    font-size:15px;
+                                    line-height:1.7;
+                                ">
+                                    Hi {{USERNAME}},
+                                </p>
+
+                                <p style="
+                                    margin:12px 0 0;
+                                    color:#667085;
+                                    font-size:14px;
+                                    line-height:1.7;
+                                ">
+                                    {{STATUS_MESSAGE}}
+                                </p>
+
+                                <div style="
+                                    margin-top:24px;
+                                    padding:18px;
+                                    background:#f8fafc;
+                                    border:1px solid #edf1f7;
+                                    border-radius:14px;
+                                ">
+
+                                    <table
+                                        width="100%"
+                                        cellpadding="0"
+                                        cellspacing="0"
+                                        border="0">
+
+                                        <tr>
+                                            <td style="
+                                                padding:6px 0;
+                                                color:#64748b;
+                                                font-size:12px;
+                                                text-transform:uppercase;
+                                            ">
+                                                Order ID
+                                            </td>
+
+                                            <td style="
+                                                padding:6px 0;
+                                                text-align:right;
+                                                color:#111827;
+                                                font-size:13px;
+                                                font-weight:700;
+                                                word-break:break-all;
+                                            ">
+                                                {{ORDER_ID}}
+                                            </td>
+                                        </tr>
+
+                                        <tr>
+                                            <td style="
+                                                padding:6px 0;
+                                                color:#64748b;
+                                                font-size:12px;
+                                                text-transform:uppercase;
+                                            ">
+                                                Order Date
+                                            </td>
+
+                                            <td style="
+                                                padding:6px 0;
+                                                text-align:right;
+                                                color:#111827;
+                                                font-size:13px;
+                                            ">
+                                                {{ORDER_DATE}}
+                                            </td>
+                                        </tr>
+
+                                        <tr>
+                                            <td style="
+                                                padding:6px 0;
+                                                color:#64748b;
+                                                font-size:12px;
+                                                text-transform:uppercase;
+                                            ">
+                                                Status
+                                            </td>
+
+                                            <td style="
+                                                padding:6px 0;
+                                                text-align:right;
+                                                color:#4f46e5;
+                                                font-size:13px;
+                                                font-weight:700;
+                                            ">
+                                                {{STATUS}}
+                                            </td>
+                                        </tr>
+
+                                        <tr>
+                                            <td style="
+                                                padding:6px 0;
+                                                color:#64748b;
+                                                font-size:12px;
+                                                text-transform:uppercase;
+                                            ">
+                                                Payment
+                                            </td>
+
+                                            <td style="
+                                                padding:6px 0;
+                                                text-align:right;
+                                                color:#111827;
+                                                font-size:13px;
+                                                font-weight:600;
+                                            ">
+                                                {{PAYMENT_METHOD}}
+                                            </td>
+                                        </tr>
+
+                                    </table>
+
+                                </div>
+
+                                <h2 style="
+                                    margin:28px 0 14px;
+                                    color:#111827;
+                                    font-size:17px;
+                                ">
+                                    Order Summary
+                                </h2>
+
+                                <div style="
+                                    width:100%;
+                                    overflow:hidden;
+                                    border:1px solid #edf1f7;
+                                    border-radius:14px;
+                                ">
+
+                                    <table
+                                        width="100%"
+                                        cellpadding="0"
+                                        cellspacing="0"
+                                        border="0"
+                                        style="
+                                            width:100%;
+                                            border-collapse:collapse;
+                                        ">
+
+                                        <thead>
+                                            <tr>
+
+                                                <th style="
+                                                    padding:12px 8px;
+                                                    text-align:left;
+                                                    background:#f8fafc;
+                                                    color:#64748b;
+                                                    font-size:11px;
+                                                    text-transform:uppercase;
+                                                    border-bottom:1px solid #edf1f7;
+                                                ">
+                                                    Item
+                                                </th>
+
+                                                <th style="
+                                                    padding:12px 8px;
+                                                    text-align:center;
+                                                    background:#f8fafc;
+                                                    color:#64748b;
+                                                    font-size:11px;
+                                                    text-transform:uppercase;
+                                                    border-bottom:1px solid #edf1f7;
+                                                ">
+                                                    Qty
+                                                </th>
+
+                                                <th style="
+                                                    padding:12px 8px;
+                                                    text-align:right;
+                                                    background:#f8fafc;
+                                                    color:#64748b;
+                                                    font-size:11px;
+                                                    text-transform:uppercase;
+                                                    border-bottom:1px solid #edf1f7;
+                                                ">
+                                                    Amount
+                                                </th>
+
+                                            </tr>
+                                        </thead>
+
+                                        <tbody>
+                                            {{ITEMS}}
+                                        </tbody>
+
+                                    </table>
+
+                                </div>
+
+                                <div style="
+                                    margin-top:18px;
+                                    padding-top:18px;
+                                    border-top:2px solid #eef2f7;
+                                ">
+
+                                    <table
+                                        width="100%"
+                                        cellpadding="0"
+                                        cellspacing="0"
+                                        border="0">
+
+                                        <tr>
+
+                                            <td style="
+                                                color:#64748b;
+                                                font-size:14px;
+                                                font-weight:600;
+                                            ">
+                                                Total
+                                            </td>
+
+                                            <td style="
+                                                text-align:right;
+                                                color:#111827;
+                                                font-size:24px;
+                                                font-weight:800;
+                                                white-space:nowrap;
+                                            ">
+                                                ₹{{TOTAL}}
+                                            </td>
+
+                                        </tr>
+
+                                    </table>
+
+                                </div>
+
+                            </div>
+
+                            <div style="
+                                padding:22px 20px;
+                                background:#fafbfc;
+                                border-top:1px solid #edf1f7;
+                                text-align:center;
+                            ">
+
+                                <div style="
+                                    color:#475569;
+                                    font-size:13px;
+                                    font-weight:700;
+                                ">
+                                    {{APP_NAME}}
+                                </div>
+
+                                <div style="
+                                    margin-top:6px;
+                                    color:#94a3b8;
+                                    font-size:11px;
+                                    line-height:1.5;
+                                ">
+                                    Thank you for shopping with us.
+                                </div>
+
+                                <div style="
+                                    margin-top:10px;
+                                    color:#c0c6d0;
+                                    font-size:10px;
+                                ">
+                                    © {{APP_NAME}}. All rights reserved.
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </body>
+                </html>
+                """
+                .replace("{{APP_NAME}}", safeAppName)
+                .replace("{{USERNAME}}", safeUsername)
+                .replace("{{ORDER_ID}}", safeOrderNumber)
+                .replace("{{ORDER_DATE}}", safeOrderDate)
+                .replace("{{STATUS}}", escapeHtml(status.name()))
+                .replace("{{STATUS_LABEL}}", escapeHtml(statusLabel))
+                .replace("{{STATUS_MESSAGE}}", escapeHtml(statusMessage))
+                .replace("{{PAYMENT_METHOD}}", escapeHtml(paymentLabel))
+                .replace("{{ITEMS}}", itemsHtml.toString())
+                .replace("{{TOTAL}}", formattedTotal);
     }
 
     // ============================================================
