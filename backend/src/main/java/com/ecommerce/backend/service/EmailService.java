@@ -54,7 +54,7 @@ public class EmailService {
                         : username.trim();
 
         String subject =
-                "Verify your " + appName + " account";
+                "Verify your " + getSafeAppName() + " account";
 
         String html =
                 buildSignupOtpEmail(
@@ -79,7 +79,7 @@ public class EmailService {
             String otp) {
 
         String subject =
-                appName + " Password Reset OTP";
+                getSafeAppName() + " Password Reset OTP";
 
         String html =
                 buildPasswordResetEmail(otp);
@@ -216,9 +216,7 @@ public class EmailService {
 
         senderObject.put(
                 "name",
-                appName == null || appName.isBlank()
-                        ? "Zyphora"
-                        : appName.trim()
+                getSafeAppName()
         );
 
         senderObject.put(
@@ -444,22 +442,22 @@ public class EmailService {
                 escapeHtml(otp);
 
         String safeAppName =
-                escapeHtml(appName);
+                escapeHtml(getSafeAppName());
 
         /*
          * IMPORTANT:
          *
-         * Do NOT use String.formatted() here.
+         * Do NOT use String.formatted() or %s placeholders here.
          *
-         * The CSS contains values such as:
+         * HTML/CSS contains legitimate percentage values such as:
          *
-         * width:100%;
-         * height:52px;
+         * width: 100%;
          *
-         * String.formatted() interprets '%' as a format
-         * character and can throw:
+         * Using formatted() with these values can cause:
          *
          * UnknownFormatConversionException: Conversion = ';'
+         *
+         * Unique placeholders are used instead.
          */
 
         return """
@@ -481,7 +479,7 @@ public class EmailService {
                 ">
 
                     <div style="
-                        width:100%%;
+                        width:100%;
                         padding:30px 15px;
                         box-sizing:border-box;
                     ">
@@ -525,7 +523,7 @@ public class EmailService {
                                     line-height:1.3;
                                     color:#172033;
                                 ">
-                                    Welcome to %s
+                                    Welcome to {{APP_NAME}}
                                 </h1>
 
                             </div>
@@ -548,7 +546,7 @@ public class EmailService {
                                     font-size:15px;
                                     line-height:1.7;
                                 ">
-                                    Hi %s,
+                                    Hi {{USERNAME}},
                                 </p>
 
                                 <p style="
@@ -557,7 +555,8 @@ public class EmailService {
                                     font-size:15px;
                                     line-height:1.7;
                                 ">
-                                    Thank you for creating your %s account.
+                                    Thank you for creating your
+                                    {{APP_NAME}} account.
                                     Enter the verification code below to
                                     complete your registration.
                                 </p>
@@ -588,7 +587,7 @@ public class EmailService {
                                         letter-spacing:7px;
                                         word-break:break-all;
                                     ">
-                                        %s
+                                        {{OTP}}
                                     </div>
 
                                 </div>
@@ -613,7 +612,7 @@ public class EmailService {
                                 color:#94a3b8;
                                 font-size:12px;
                             ">
-                                © %s. All rights reserved.
+                                © {{APP_NAME}}. All rights reserved.
                             </div>
 
                         </div>
@@ -623,12 +622,18 @@ public class EmailService {
                 </body>
                 </html>
                 """
-                .replace("%s", safeAppName)
-                .replaceFirst("%s", safeUsername)
-                .replaceFirst("%s", safeAppName)
-                .replaceFirst("%s", safeOtp)
-                .replaceFirst("%s", safeAppName)
-                .replace("%%", "%");
+                .replace(
+                        "{{APP_NAME}}",
+                        safeAppName
+                )
+                .replace(
+                        "{{USERNAME}}",
+                        safeUsername
+                )
+                .replace(
+                        "{{OTP}}",
+                        safeOtp
+                );
     }
 
     // ============================================================
@@ -642,7 +647,7 @@ public class EmailService {
                 escapeHtml(otp);
 
         String safeAppName =
-                escapeHtml(appName);
+                escapeHtml(getSafeAppName());
 
         return """
                 <!DOCTYPE html>
@@ -663,7 +668,7 @@ public class EmailService {
                 ">
 
                     <div style="
-                        width:100%%;
+                        width:100%;
                         padding:30px 15px;
                         box-sizing:border-box;
                     ">
@@ -708,7 +713,7 @@ public class EmailService {
                                 font-size:15px;
                             ">
                                 We received a request to reset your
-                                %s account password.
+                                {{APP_NAME}} account password.
                             </p>
 
                             <div style="
@@ -736,7 +741,7 @@ public class EmailService {
                                     letter-spacing:7px;
                                     word-break:break-all;
                                 ">
-                                    %s
+                                    {{OTP}}
                                 </div>
 
                             </div>
@@ -759,9 +764,14 @@ public class EmailService {
                 </body>
                 </html>
                 """
-                .replace("%s", safeAppName)
-                .replaceFirst("%s", safeOtp)
-                .replace("%%", "%");
+                .replace(
+                        "{{APP_NAME}}",
+                        safeAppName
+                )
+                .replace(
+                        "{{OTP}}",
+                        safeOtp
+                );
     }
 
     // ============================================================
@@ -895,15 +905,15 @@ public class EmailService {
         }
 
         String safeAppName =
-                escapeHtml(appName);
+                escapeHtml(getSafeAppName());
 
-        /*
-         * IMPORTANT:
-         *
-         * No String.formatted() here.
-         *
-         * This HTML contains CSS percentage values.
-         */
+        String formattedTotal =
+                String.format(
+                        Locale.ENGLISH,
+                        "%.2f",
+                        total
+                );
+
         return """
                 <!DOCTYPE html>
                 <html>
@@ -923,7 +933,7 @@ public class EmailService {
                 ">
 
                     <div style="
-                        width:100%%;
+                        width:100%;
                         padding:30px 15px;
                         box-sizing:border-box;
                     ">
@@ -976,7 +986,7 @@ public class EmailService {
                                     color:#475569;
                                     font-size:14px;
                                 ">
-                                    Thank you for shopping with %s.
+                                    Thank you for shopping with {{APP_NAME}}.
                                 </p>
 
                             </div>
@@ -992,7 +1002,7 @@ public class EmailService {
                                     line-height:1.7;
                                     color:#172033;
                                 ">
-                                    Hi %s,
+                                    Hi {{USERNAME}},
                                 </p>
 
                                 <p style="
@@ -1014,16 +1024,17 @@ public class EmailService {
                                 ">
 
                                     <table
-                                        width="100%%"
+                                        width="100%"
                                         cellpadding="0"
                                         cellspacing="0"
                                         border="0"
                                         style="
-                                            width:100%%;
+                                            width:100%;
                                             border-collapse:collapse;
                                         ">
 
                                         <tr>
+
                                             <td style="
                                                 padding:7px 0;
                                                 color:#64748b;
@@ -1039,11 +1050,13 @@ public class EmailService {
                                                 font-size:14px;
                                                 word-break:break-all;
                                             ">
-                                                %s
+                                                {{ORDER_ID}}
                                             </td>
+
                                         </tr>
 
                                         <tr>
+
                                             <td style="
                                                 padding:7px 0;
                                                 color:#64748b;
@@ -1057,11 +1070,13 @@ public class EmailService {
                                                 text-align:right;
                                                 font-size:14px;
                                             ">
-                                                %s
+                                                {{ORDER_DATE}}
                                             </td>
+
                                         </tr>
 
                                         <tr>
+
                                             <td style="
                                                 padding:7px 0;
                                                 color:#64748b;
@@ -1077,8 +1092,9 @@ public class EmailService {
                                                 color:#4f46e5;
                                                 font-size:14px;
                                             ">
-                                                %s
+                                                {{STATUS}}
                                             </td>
+
                                         </tr>
 
                                     </table>
@@ -1094,23 +1110,24 @@ public class EmailService {
                                 </h3>
 
                                 <div style="
-                                    width:100%%;
+                                    width:100%;
                                     overflow-x:auto;
                                 ">
 
                                     <table
-                                        width="100%%"
+                                        width="100%"
                                         cellpadding="0"
                                         cellspacing="0"
                                         border="0"
                                         style="
-                                            width:100%%;
+                                            width:100%;
                                             min-width:400px;
                                             border-collapse:collapse;
                                             font-size:14px;
                                         ">
 
                                         <thead>
+
                                             <tr>
 
                                                 <th style="
@@ -1141,10 +1158,11 @@ public class EmailService {
                                                 </th>
 
                                             </tr>
+
                                         </thead>
 
                                         <tbody>
-                                            %s
+                                            {{ITEMS}}
                                         </tbody>
 
                                     </table>
@@ -1170,7 +1188,7 @@ public class EmailService {
                                         font-size:23px;
                                         color:#4f46e5;
                                     ">
-                                        ₹%.2f
+                                        ₹{{TOTAL}}
                                     </strong>
 
                                 </div>
@@ -1184,7 +1202,7 @@ public class EmailService {
                                 color:#94a3b8;
                                 font-size:12px;
                             ">
-                                © %s · Thank you for choosing %s.
+                                © {{APP_NAME}} · Thank you for choosing {{APP_NAME}}.
                             </div>
 
                         </div>
@@ -1194,25 +1212,48 @@ public class EmailService {
                 </body>
                 </html>
                 """
-                .replace("%%", "%")
-                .replaceFirst("%s", safeAppName)
-                .replaceFirst("%s", safeUsername)
-                .replaceFirst("%s", safeOrderNumber)
-                .replaceFirst("%s", safeOrderDate)
-                .replaceFirst("%s", safeStatus)
-                .replaceFirst("%s", itemsHtml.toString())
-                .replaceFirst("%.2f", String.format(
-                        Locale.ENGLISH,
-                        "%.2f",
-                        total
-                ))
-                .replaceFirst("%s", safeAppName)
-                .replaceFirst("%s", safeAppName);
+                .replace(
+                        "{{APP_NAME}}",
+                        safeAppName
+                )
+                .replace(
+                        "{{USERNAME}}",
+                        safeUsername
+                )
+                .replace(
+                        "{{ORDER_ID}}",
+                        safeOrderNumber
+                )
+                .replace(
+                        "{{ORDER_DATE}}",
+                        safeOrderDate
+                )
+                .replace(
+                        "{{STATUS}}",
+                        safeStatus
+                )
+                .replace(
+                        "{{ITEMS}}",
+                        itemsHtml.toString()
+                )
+                .replace(
+                        "{{TOTAL}}",
+                        formattedTotal
+                );
     }
 
     // ============================================================
     // HELPERS
     // ============================================================
+
+    private String getSafeAppName() {
+
+        if (appName == null || appName.isBlank()) {
+            return "Zyphora";
+        }
+
+        return appName.trim();
+    }
 
     private String normalizeEmail(
             String email) {
