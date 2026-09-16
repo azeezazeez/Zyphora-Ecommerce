@@ -2,16 +2,24 @@ package com.ecommerce.backend.service;
 
 import com.ecommerce.backend.entity.Order;
 import com.ecommerce.backend.entity.OrderItem;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 @Service
 public class EmailService {
@@ -20,11 +28,12 @@ public class EmailService {
             "https://api.brevo.com/v3/smtp/email";
 
     private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
 
-    @Value("${brevo.api.key}")
+    @Value("${brevo.api.key:}")
     private String brevoApiKey;
 
-    @Value("${user.mail}")
+    @Value("${user.mail:}")
     private String senderEmail;
 
     @Value("${app.name:Zyphora}")
@@ -32,6 +41,7 @@ public class EmailService {
 
     public EmailService() {
         this.restTemplate = new RestTemplate();
+        this.objectMapper = new ObjectMapper();
     }
 
     // ============================================================
@@ -46,15 +56,16 @@ public class EmailService {
         String recipientName =
                 username == null || username.isBlank()
                         ? "Zyphora User"
-                        : username;
+                        : username.trim();
 
         String subject =
                 "Verify your " + appName + " account";
 
-        String html = buildSignupOtpEmail(
-                recipientName,
-                otp
-        );
+        String html =
+                buildSignupOtpEmail(
+                        recipientName,
+                        otp
+                );
 
         sendEmail(
                 toEmail,
@@ -104,7 +115,7 @@ public class EmailService {
         String recipientName =
                 username == null || username.isBlank()
                         ? "Zyphora Customer"
-                        : username;
+                        : username.trim();
 
         String orderNumber =
                 order.getOrderId() != null
@@ -138,68 +149,166 @@ public class EmailService {
             String subject,
             String htmlContent) {
 
-        if (toEmail == null || toEmail.isBlank()) {
+        String recipient = normalizeEmail(toEmail);
+        String sender = normalizeEmail(senderEmail);
+
+        if (recipient.isBlank()) {
             throw new IllegalArgumentException(
                     "Recipient email cannot be empty."
             );
         }
 
-        if (brevoApiKey == null || brevoApiKey.isBlank()) {
-            throw new IllegalStateException(
-                    "BREVO_API_KEY is not configured."
+        if (!isValidEmail(recipient)) {
+            throw new IllegalArgumentException(
+                    "Invalid recipient email address."
             );
         }
 
-        if (senderEmail == null || senderEmail.isBlank()) {
+        if (brevoApiKey == null || brevoApiKey.trim().isBlank()) {
             throw new IllegalStateException(
-                    "USER_MAIL is not configured."
+                    "BREVO_API_KEY is not configured in the backend environment."
             );
         }
 
-        HttpHeaders headers = new HttpHeaders();
+        if (sender.isBlank()) {
+            throw new IllegalStateException(
+                    "USER_MAIL is not configured in the backend environment."
+            );
+        }
+
+        if (!isValidEmail(sender)) {
+            throw new IllegalStateException(
+                    "USER_MAIL is not a valid email address."
+            );
+        }
+
+        if (subject == null || subject.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Email subject cannot be empty."
+            );
+        }
+
+        if (htmlContent == null || htmlContent.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Email HTML content cannot be empty."
+            );
+        }
+
+        /*
+         * IMPORTANT:
+         *
+         * Never print the Brevo API key.
+         * We only log whether it exists and its length.
+         */
+        String apiKey = brevoApiKey.trim();
+
+        System.out.println(
+                "Zyphora email configuration: "
+                        + "Brevo API key configured="
+                        + !apiKey.isBlank()
+                        + ", key length="
+                        + apiKey.length()
+                        + ", sender="
+                        + sender
+        );
+
+        // --------------------------------------------------------
+        // Build Brevo request using Maps instead of manual JSON.
+        // --------------------------------------------------------
+
+        Map<String, Object> senderObject =
+                new HashMap<>();
+
+        senderObject.put(
+                "name",
+                appName == null || appName.isBlank()
+                        ? "Zyphora"
+                        : appName.trim()
+        );
+
+        senderObject.put(
+                "email",
+                sender
+        );
+
+        Map<String, Object> recipientObject =
+                new HashMap<>();
+
+        recipientObject.put(
+                "email",
+                recipient
+        );
+
+        recipientObject.put(
+                "name",
+                recipientName == null || recipientName.isBlank()
+                        ? "Zyphora Customer"
+                        : recipientName.trim()
+        );
+
+        Map<String, Object> requestBody =
+                new HashMap<>();
+
+        requestBody.put(
+                "sender",
+                senderObject
+        );
+
+        requestBody.put(
+                "to",
+                List.of(recipientObject)
+        );
+
+        requestBody.put(
+                "subject",
+                subject.trim()
+        );
+
+        requestBody.put(
+                "htmlContent",
+                htmlContent
+        );
+
+        final String jsonBody;
+
+        try {
+            jsonBody =
+                    objectMapper.writeValueAsString(requestBody);
+
+        } catch (JsonProcessingException exception) {
+
+            System.err.println(
+                    "Zyphora: Failed to create Brevo JSON payload."
+            );
+
+            throw new IllegalStateException(
+                    "Unable to prepare email request.",
+                    exception
+            );
+        }
+
+        // --------------------------------------------------------
+        // Headers
+        // --------------------------------------------------------
+
+        HttpHeaders headers =
+                new HttpHeaders();
 
         headers.setContentType(
                 MediaType.APPLICATION_JSON
-        );
-
-        headers.set(
-                "api-key",
-                brevoApiKey
         );
 
         headers.setAccept(
                 List.of(MediaType.APPLICATION_JSON)
         );
 
-        String jsonBody =
-                "{"
-                        + "\"sender\":{"
-                        + "\"name\":\""
-                        + escapeJson(appName)
-                        + "\","
-                        + "\"email\":\""
-                        + escapeJson(senderEmail)
-                        + "\""
-                        + "},"
-                        + "\"to\":[{"
-                        + "\"email\":\""
-                        + escapeJson(toEmail)
-                        + "\","
-                        + "\"name\":\""
-                        + escapeJson(
-                                recipientName == null
-                                        ? "Zyphora Customer"
-                                        : recipientName
-                        )
-                        + "\""
-                        + "}],"
-                        + "\"subject\":\""
-                        + escapeJson(subject)
-                        + "\","
-                        + "\"htmlContent\":\""
-                        + escapeJson(htmlContent)
-                        + "\""
-                        + "}";
+        /*
+         * Brevo v3 API authentication header.
+         */
+        headers.set(
+                "api-key",
+                apiKey
+        );
 
         HttpEntity<String> request =
                 new HttpEntity<>(
@@ -207,33 +316,193 @@ public class EmailService {
                         headers
                 );
 
+        // --------------------------------------------------------
+        // Call Brevo
+        // --------------------------------------------------------
+
         try {
 
-            restTemplate.postForEntity(
-                    BREVO_API_URL,
-                    request,
-                    String.class
+            System.out.println(
+                    "Zyphora: Sending email through Brevo..."
             );
 
             System.out.println(
-                    "Zyphora email sent successfully to: "
-                            + toEmail
+                    "Zyphora: Recipient="
+                            + recipient
+                            + ", Sender="
+                            + sender
+            );
+
+            ResponseEntity<String> response =
+                    restTemplate.postForEntity(
+                            BREVO_API_URL,
+                            request,
+                            String.class
+                    );
+
+            HttpStatusCode status =
+                    response.getStatusCode();
+
+            String responseBody =
+                    response.getBody();
+
+            if (!status.is2xxSuccessful()) {
+
+                System.err.println(
+                        "================================================"
+                );
+
+                System.err.println(
+                        "BREVO EMAIL FAILED"
+                );
+
+                System.err.println(
+                        "HTTP Status: "
+                                + status.value()
+                );
+
+                System.err.println(
+                        "Brevo Response: "
+                                + safeLog(responseBody)
+                );
+
+                System.err.println(
+                        "================================================"
+                );
+
+                throw new IllegalStateException(
+                        "Brevo rejected the email request. "
+                                + "HTTP "
+                                + status.value()
+                                + ": "
+                                + safeLog(responseBody)
+                );
+            }
+
+            System.out.println(
+                    "================================================"
+            );
+
+            System.out.println(
+                    "ZYPHORA EMAIL SENT SUCCESSFULLY"
+            );
+
+            System.out.println(
+                    "Brevo HTTP Status: "
+                            + status.value()
+            );
+
+            System.out.println(
+                    "Recipient: "
+                            + recipient
+            );
+
+            System.out.println(
+                    "================================================"
+            );
+
+        } catch (HttpStatusCodeException exception) {
+
+            /*
+             * THIS IS THE MOST IMPORTANT PART.
+             *
+             * Brevo's actual response will now appear in
+             * Render logs.
+             *
+             * We NEVER print the API key.
+             */
+
+            int status =
+                    exception.getStatusCode().value();
+
+            String responseBody =
+                    exception.getResponseBodyAsString();
+
+            System.err.println(
+                    "================================================"
+            );
+
+            System.err.println(
+                    "BREVO API ERROR"
+            );
+
+            System.err.println(
+                    "HTTP Status: "
+                            + status
+            );
+
+            System.err.println(
+                    "Response: "
+                            + safeLog(responseBody)
+            );
+
+            System.err.println(
+                    "================================================"
+            );
+
+            throw new IllegalStateException(
+                    "Brevo email API returned HTTP "
+                            + status
+                            + ": "
+                            + safeLog(responseBody),
+                    exception
+            );
+
+        } catch (ResourceAccessException exception) {
+
+            System.err.println(
+                    "================================================"
+            );
+
+            System.err.println(
+                    "BREVO CONNECTION ERROR"
+            );
+
+            System.err.println(
+                    "Could not connect to Brevo."
+            );
+
+            System.err.println(
+                    "Reason: "
+                            + exception.getMessage()
+            );
+
+            System.err.println(
+                    "================================================"
+            );
+
+            throw new IllegalStateException(
+                    "Could not connect to Brevo email service.",
+                    exception
             );
 
         } catch (Exception exception) {
 
             System.err.println(
-                    "Failed to send Zyphora email to: "
-                            + toEmail
+                    "================================================"
             );
 
             System.err.println(
-                    "Brevo error: "
+                    "BREVO EMAIL ERROR"
+            );
+
+            System.err.println(
+                    "Error type: "
+                            + exception.getClass().getName()
+            );
+
+            System.err.println(
+                    "Message: "
                             + exception.getMessage()
             );
 
-            throw new RuntimeException(
-                    "Failed to send email through Brevo.",
+            System.err.println(
+                    "================================================"
+            );
+
+            throw new IllegalStateException(
+                    "Failed to send email through Brevo: "
+                            + safeLog(exception.getMessage()),
                     exception
             );
         }
@@ -247,9 +516,14 @@ public class EmailService {
             String username,
             String otp) {
 
-        String safeUsername = escapeHtml(username);
-        String safeOtp = escapeHtml(otp);
-        String safeAppName = escapeHtml(appName);
+        String safeUsername =
+                escapeHtml(username);
+
+        String safeOtp =
+                escapeHtml(otp);
+
+        String safeAppName =
+                escapeHtml(appName);
 
         return """
                 <!DOCTYPE html>
@@ -427,8 +701,11 @@ public class EmailService {
     private String buildPasswordResetEmail(
             String otp) {
 
-        String safeOtp = escapeHtml(otp);
-        String safeAppName = escapeHtml(appName);
+        String safeOtp =
+                escapeHtml(otp);
+
+        String safeAppName =
+                escapeHtml(appName);
 
         return """
                 <!DOCTYPE html>
@@ -558,7 +835,8 @@ public class EmailService {
             String username,
             Order order) {
 
-        String safeUsername = escapeHtml(username);
+        String safeUsername =
+                escapeHtml(username);
 
         String orderNumber =
                 order.getOrderId() != null
@@ -568,7 +846,8 @@ public class EmailService {
         String safeOrderNumber =
                 escapeHtml(orderNumber);
 
-        String orderDate = "N/A";
+        String orderDate =
+                "N/A";
 
         if (order.getOrderDate() != null) {
 
@@ -579,7 +858,8 @@ public class EmailService {
                     );
 
             orderDate =
-                    order.getOrderDate().format(formatter);
+                    order.getOrderDate()
+                            .format(formatter);
         }
 
         String safeOrderDate =
@@ -623,6 +903,7 @@ public class EmailService {
 
                 itemsHtml
                         .append("<tr>")
+
                         .append("<td style=\"")
                         .append("padding:14px 8px;")
                         .append("border-bottom:1px solid #eef2f7;")
@@ -655,6 +936,7 @@ public class EmailService {
                                 )
                         )
                         .append("</td>")
+
                         .append("</tr>");
             }
 
@@ -980,6 +1262,53 @@ public class EmailService {
     }
 
     // ============================================================
+    // HELPERS
+    // ============================================================
+
+    private String normalizeEmail(String email) {
+
+        if (email == null) {
+            return "";
+        }
+
+        return email.trim()
+                .toLowerCase(Locale.ROOT);
+    }
+
+    private boolean isValidEmail(String email) {
+
+        if (email == null || email.isBlank()) {
+            return false;
+        }
+
+        return email.matches(
+                "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
+        );
+    }
+
+    /*
+     * Prevent accidental logging of extremely large API responses.
+     */
+    private String safeLog(String value) {
+
+        if (value == null || value.isBlank()) {
+            return "(empty response)";
+        }
+
+        String cleaned =
+                value.replace("\n", " ")
+                        .replace("\r", " ")
+                        .trim();
+
+        if (cleaned.length() > 2000) {
+            return cleaned.substring(0, 2000)
+                    + "...";
+        }
+
+        return cleaned;
+    }
+
+    // ============================================================
     // HTML ESCAPING
     // ============================================================
 
@@ -995,23 +1324,5 @@ public class EmailService {
                 .replace(">", "&gt;")
                 .replace("\"", "&quot;")
                 .replace("'", "&#39;");
-    }
-
-    // ============================================================
-    // JSON ESCAPING
-    // ============================================================
-
-    private String escapeJson(String value) {
-
-        if (value == null) {
-            return "";
-        }
-
-        return value
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\r", "\\r")
-                .replace("\n", "\\n")
-                .replace("\t", "\\t");
     }
 }
