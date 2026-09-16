@@ -44,23 +44,7 @@ public class Order {
     @Enumerated(EnumType.STRING)
     private OrderStatus status;
 
-    /*
-     * ============================================================
-     * PAYMENT METHOD
-     * ============================================================
-     *
-     * Supported values:
-     *
-     * COD  -> Cash on Delivery
-     * UPI  -> UPI payment
-     * CARD -> Credit / Debit Card
-     *
-     * IMPORTANT:
-     * This stores only the selected payment method.
-     *
-     * Card number, CVV, expiry and other sensitive card
-     * information must NOT be stored in this table.
-     */
+
     @Column(
             name = "payment_method",
             nullable = false,
@@ -68,11 +52,6 @@ public class Order {
     )
     private String paymentMethod;
 
-    /*
-     * ============================================================
-     * ORDER ITEMS
-     * ============================================================
-     */
 
     @OneToMany(
             mappedBy = "order",
@@ -80,12 +59,6 @@ public class Order {
             fetch = FetchType.EAGER
     )
     private List<OrderItem> items = new ArrayList<>();
-
-    /*
-     * ============================================================
-     * PRE-PERSIST
-     * ============================================================
-     */
 
     @PrePersist
     protected void onCreate() {
@@ -105,11 +78,7 @@ public class Order {
             status = OrderStatus.PENDING;
         }
 
-        /*
-         * Keep COD as the default for any existing code path
-         * that creates an Order without explicitly setting
-         * a payment method.
-         */
+        
         if (paymentMethod == null
                 || paymentMethod.isBlank()) {
 
