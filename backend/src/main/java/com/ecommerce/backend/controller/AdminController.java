@@ -3,6 +3,7 @@ package com.ecommerce.backend.controller;
 import com.ecommerce.backend.dto.*;
 import com.ecommerce.backend.entity.*;
 import com.ecommerce.backend.repository.*;
+import com.ecommerce.backend.service.EmailService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -27,60 +28,128 @@ public class AdminController {
     @Autowired
     private OrderRepository orderRepository;
 
+    @Autowired
+    private EmailService emailService;
+
+    // =========================================================
+    // ORDER CONVERSION
+    // =========================================================
+
     // Convert Order to AdminOrder format (matches frontend AdminOrder interface)
     private Map<String, Object> convertToAdminOrder(Order order) {
+
         Map<String, Object> adminOrder = new HashMap<>();
+
         adminOrder.put("orderId", order.getOrderId());
         adminOrder.put("userId", order.getUserId());
-        adminOrder.put("orderDate", order.getOrderDate().toString());
+        adminOrder.put(
+                "orderDate",
+                order.getOrderDate() != null
+                        ? order.getOrderDate().toString()
+                        : null
+        );
         adminOrder.put("totalAmount", order.getTotalAmount());
-        adminOrder.put("status", order.getStatus().toString());
-        adminOrder.put("shippingAddress", "123 Main St"); // Update with actual address
+        adminOrder.put(
+                "status",
+                order.getStatus() != null
+                        ? order.getStatus().toString()
+                        : null
+        );
 
-        // Get customer info
+        // Payment method
+        adminOrder.put(
+                "paymentMethod",
+                order.getPaymentMethod() != null
+                        ? order.getPaymentMethod()
+                        : "COD"
+        );
+
+        // Update this later if shipping address is stored on Order.
+        adminOrder.put("shippingAddress", "123 Main St");
+
+        // =====================================================
+        // CUSTOMER INFORMATION
+        // =====================================================
+
         Optional<User> userOpt = userRepository.findById(order.getUserId());
+
         if (userOpt.isPresent()) {
+
             User user = userOpt.get();
+
             adminOrder.put("customerName", user.getUsername());
             adminOrder.put("customerEmail", user.getEmail());
+
         } else {
+
             adminOrder.put("customerName", "Unknown");
             adminOrder.put("customerEmail", "unknown@example.com");
         }
 
-        // Convert order items
+        // =====================================================
+        // ORDER ITEMS
+        // =====================================================
+
         List<Map<String, Object>> items = new ArrayList<>();
+
         if (order.getItems() != null) {
+
             for (OrderItem item : order.getItems()) {
+
                 Map<String, Object> orderItem = new HashMap<>();
+
                 orderItem.put("productId", item.getProductId());
                 orderItem.put("productName", item.getProductName());
                 orderItem.put("quantity", item.getQuantity());
                 orderItem.put("price", item.getPrice());
+
                 items.add(orderItem);
             }
         }
+
         adminOrder.put("items", items);
 
         return adminOrder;
     }
 
-    // Convert User to AdminCustomer format (matches frontend AdminCustomer interface)
+    // =========================================================
+    // CUSTOMER CONVERSION
+    // =========================================================
+
+    // Convert User to AdminCustomer format
+    // (matches frontend AdminCustomer interface)
     private Map<String, Object> convertToAdminCustomer(User user) {
+
         Map<String, Object> adminCustomer = new HashMap<>();
+
         adminCustomer.put("id", user.getId());
         adminCustomer.put("name", user.getUsername());
         adminCustomer.put("email", user.getEmail());
         adminCustomer.put("role", user.getRole());
-        adminCustomer.put("joinedDate", user.getCreatedAt() != null ? user.getCreatedAt().toString() : LocalDateTime.now().toString());
 
-        // Get order stats for this customer
-        List<Order> userOrders = orderRepository.findAll().stream()
-                .filter(order -> order.getUserId() != null && order.getUserId().equals(user.getId()))
+        adminCustomer.put(
+                "joinedDate",
+                user.getCreatedAt() != null
+                        ? user.getCreatedAt().toString()
+                        : LocalDateTime.now().toString()
+        );
+
+        // =====================================================
+        // CUSTOMER ORDER STATISTICS
+        // =====================================================
+
+        List<Order> userOrders = orderRepository.findAll()
+                .stream()
+                .filter(order ->
+                        order.getUserId() != null
+                                && order.getUserId().equals(user.getId())
+                )
                 .collect(Collectors.toList());
 
         int totalOrders = userOrders.size();
-        double totalSpent = userOrders.stream()
+
+        double totalSpent = userOrders
+                .stream()
                 .filter(order -> order.getStatus() == OrderStatus.DELIVERED)
                 .mapToDouble(Order::getTotalAmount)
                 .sum();
@@ -91,22 +160,34 @@ public class AdminController {
         return adminCustomer;
     }
 
-    // Product Management
+    // =========================================================
+    // PRODUCT MANAGEMENT
+    // =========================================================
+
     @PostMapping("/products")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> createProduct(@RequestBody Map<String, Object> request) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> createProduct(
+            @RequestBody Map<String, Object> request) {
+
         try {
+
             Product product = new Product();
+
             product.setName((String) request.get("name"));
             product.setDescription((String) request.get("description"));
-            product.setPrice(Double.parseDouble(request.get("price").toString()));
+            product.setPrice(
+                    Double.parseDouble(request.get("price").toString())
+            );
             product.setCategory((String) request.get("category"));
             product.setImage((String) request.get("image"));
-            product.setStock(Integer.parseInt(request.get("stock").toString()));
+            product.setStock(
+                    Integer.parseInt(request.get("stock").toString())
+            );
             product.setCreatedAt(LocalDateTime.now());
 
             Product savedProduct = productRepository.save(product);
 
             Map<String, Object> response = new HashMap<>();
+
             response.put("id", savedProduct.getId());
             response.put("name", savedProduct.getName());
             response.put("description", savedProduct.getDescription());
@@ -115,11 +196,25 @@ public class AdminController {
             response.put("image", savedProduct.getImage());
             response.put("stock", savedProduct.getStock());
 
-            return ResponseEntity.status(HttpStatus.CREATED)
-                    .body(ApiResponse.success("Product created successfully", response));
+            return ResponseEntity
+                    .status(HttpStatus.CREATED)
+                    .body(
+                            ApiResponse.success(
+                                    "Product created successfully",
+                                    response
+                            )
+                    );
+
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ApiResponse.error("Failed to create product: " + e.getMessage()));
+
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(
+                            ApiResponse.error(
+                                    "Failed to create product: "
+                                            + e.getMessage()
+                            )
+                    );
         }
     }
 
@@ -127,25 +222,68 @@ public class AdminController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> updateProduct(
             @PathVariable Long id,
             @RequestBody Map<String, Object> request) {
+
         try {
-            Optional<Product> productOpt = productRepository.findById(id);
+
+            Optional<Product> productOpt =
+                    productRepository.findById(id);
+
             if (productOpt.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(ApiResponse.error("Product not found"));
+
+                return ResponseEntity
+                        .status(HttpStatus.NOT_FOUND)
+                        .body(
+                                ApiResponse.error("Product not found")
+                        );
             }
 
             Product product = productOpt.get();
-            if (request.containsKey("name")) product.setName((String) request.get("name"));
-            if (request.containsKey("description")) product.setDescription((String) request.get("description"));
-            if (request.containsKey("price")) product.setPrice(Double.parseDouble(request.get("price").toString()));
-            if (request.containsKey("category")) product.setCategory((String) request.get("category"));
-            if (request.containsKey("image")) product.setImage((String) request.get("image"));
-            if (request.containsKey("stock")) product.setStock(Integer.parseInt(request.get("stock").toString()));
+
+            if (request.containsKey("name")) {
+                product.setName((String) request.get("name"));
+            }
+
+            if (request.containsKey("description")) {
+                product.setDescription(
+                        (String) request.get("description")
+                );
+            }
+
+            if (request.containsKey("price")) {
+                product.setPrice(
+                        Double.parseDouble(
+                                request.get("price").toString()
+                        )
+                );
+            }
+
+            if (request.containsKey("category")) {
+                product.setCategory(
+                        (String) request.get("category")
+                );
+            }
+
+            if (request.containsKey("image")) {
+                product.setImage(
+                        (String) request.get("image")
+                );
+            }
+
+            if (request.containsKey("stock")) {
+                product.setStock(
+                        Integer.parseInt(
+                                request.get("stock").toString()
+                        )
+                );
+            }
+
             product.setUpdatedAt(LocalDateTime.now());
 
-            Product updatedProduct = productRepository.save(product);
+            Product updatedProduct =
+                    productRepository.save(product);
 
             Map<String, Object> response = new HashMap<>();
+
             response.put("id", updatedProduct.getId());
             response.put("name", updatedProduct.getName());
             response.put("description", updatedProduct.getDescription());
@@ -154,118 +292,553 @@ public class AdminController {
             response.put("image", updatedProduct.getImage());
             response.put("stock", updatedProduct.getStock());
 
-            return ResponseEntity.ok(ApiResponse.success("Product updated successfully", response));
+            return ResponseEntity.ok(
+                    ApiResponse.success(
+                            "Product updated successfully",
+                            response
+                    )
+            );
+
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ApiResponse.error("Failed to update product: " + e.getMessage()));
+
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(
+                            ApiResponse.error(
+                                    "Failed to update product: "
+                                            + e.getMessage()
+                            )
+                    );
         }
     }
 
     @DeleteMapping("/products/{id}")
-    public ResponseEntity<ApiResponse<Void>> deleteProduct(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<Void>> deleteProduct(
+            @PathVariable Long id) {
+
         try {
-            Optional<Product> productOpt = productRepository.findById(id);
+
+            Optional<Product> productOpt =
+                    productRepository.findById(id);
+
             if (productOpt.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(ApiResponse.error("Product not found"));
+
+                return ResponseEntity
+                        .status(HttpStatus.NOT_FOUND)
+                        .body(
+                                ApiResponse.error(
+                                        "Product not found"
+                                )
+                        );
             }
+
             productRepository.deleteById(id);
-            return ResponseEntity.ok(ApiResponse.success("Product deleted successfully", null));
+
+            return ResponseEntity.ok(
+                    ApiResponse.success(
+                            "Product deleted successfully",
+                            null
+                    )
+            );
+
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ApiResponse.error("Failed to delete product: " + e.getMessage()));
+
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(
+                            ApiResponse.error(
+                                    "Failed to delete product: "
+                                            + e.getMessage()
+                            )
+                    );
         }
     }
 
-    // Order Management - Returns data in format frontend expects
+    // =========================================================
+    // ORDER MANAGEMENT
+    // =========================================================
+
+    // Returns data in format frontend expects
     @GetMapping("/orders")
-    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getAllOrders() {
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>>
+    getAllOrders() {
+
         try {
-            List<Order> orders = orderRepository.findAll();
-            List<Map<String, Object>> adminOrders = orders.stream()
-                    .sorted((a, b) -> b.getOrderDate().compareTo(a.getOrderDate()))
-                    .map(this::convertToAdminOrder)
-                    .collect(Collectors.toList());
-            return ResponseEntity.ok(ApiResponse.success("Orders fetched successfully", adminOrders));
+
+            List<Order> orders =
+                    orderRepository.findAll();
+
+            List<Map<String, Object>> adminOrders =
+                    orders.stream()
+                            .sorted(
+                                    (a, b) ->
+                                            b.getOrderDate()
+                                                    .compareTo(
+                                                            a.getOrderDate()
+                                                    )
+                            )
+                            .map(this::convertToAdminOrder)
+                            .collect(Collectors.toList());
+
+            return ResponseEntity.ok(
+                    ApiResponse.success(
+                            "Orders fetched successfully",
+                            adminOrders
+                    )
+            );
+
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Failed to fetch orders: " + e.getMessage()));
+
+            return ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(
+                            ApiResponse.error(
+                                    "Failed to fetch orders: "
+                                            + e.getMessage()
+                            )
+                    );
         }
     }
 
     @GetMapping("/orders/stats")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> getOrderStats() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>>
+    getOrderStats() {
+
         try {
-            List<Order> orders = orderRepository.findAll();
 
-            Map<String, Object> stats = new HashMap<>();
-            stats.put("totalOrders", orders.size());
-            stats.put("totalRevenue", orders.stream()
-                    .filter(order -> order.getStatus() == OrderStatus.DELIVERED)
-                    .mapToDouble(Order::getTotalAmount).sum());
-            stats.put("pendingOrders", orders.stream().filter(o -> o.getStatus() == OrderStatus.PENDING).count());
-            stats.put("confirmedOrders", orders.stream().filter(o -> o.getStatus() == OrderStatus.CONFIRMED).count());
-            stats.put("processingOrders", orders.stream().filter(o -> o.getStatus() == OrderStatus.PROCESSING).count());
-            stats.put("shippedOrders", orders.stream().filter(o -> o.getStatus() == OrderStatus.SHIPPED).count());
-            stats.put("deliveredOrders", orders.stream().filter(o -> o.getStatus() == OrderStatus.DELIVERED).count());
-            stats.put("cancelledOrders", orders.stream().filter(o -> o.getStatus() == OrderStatus.CANCELLED).count());
-            stats.put("recentOrders", orders.stream()
-                    .sorted((a, b) -> b.getOrderDate().compareTo(a.getOrderDate()))
-                    .limit(10)
-                    .map(this::convertToAdminOrder)
-                    .collect(Collectors.toList()));
+            List<Order> orders =
+                    orderRepository.findAll();
 
-            return ResponseEntity.ok(ApiResponse.success("Stats fetched successfully", stats));
+            Map<String, Object> stats =
+                    new HashMap<>();
+
+            stats.put(
+                    "totalOrders",
+                    orders.size()
+            );
+
+            stats.put(
+                    "totalRevenue",
+                    orders.stream()
+                            .filter(
+                                    order ->
+                                            order.getStatus()
+                                                    == OrderStatus.DELIVERED
+                            )
+                            .mapToDouble(Order::getTotalAmount)
+                            .sum()
+            );
+
+            stats.put(
+                    "pendingOrders",
+                    orders.stream()
+                            .filter(
+                                    o ->
+                                            o.getStatus()
+                                                    == OrderStatus.PENDING
+                            )
+                            .count()
+            );
+
+            stats.put(
+                    "confirmedOrders",
+                    orders.stream()
+                            .filter(
+                                    o ->
+                                            o.getStatus()
+                                                    == OrderStatus.CONFIRMED
+                            )
+                            .count()
+            );
+
+            stats.put(
+                    "processingOrders",
+                    orders.stream()
+                            .filter(
+                                    o ->
+                                            o.getStatus()
+                                                    == OrderStatus.PROCESSING
+                            )
+                            .count()
+            );
+
+            stats.put(
+                    "shippedOrders",
+                    orders.stream()
+                            .filter(
+                                    o ->
+                                            o.getStatus()
+                                                    == OrderStatus.SHIPPED
+                            )
+                            .count()
+            );
+
+            stats.put(
+                    "deliveredOrders",
+                    orders.stream()
+                            .filter(
+                                    o ->
+                                            o.getStatus()
+                                                    == OrderStatus.DELIVERED
+                            )
+                            .count()
+            );
+
+            stats.put(
+                    "cancelledOrders",
+                    orders.stream()
+                            .filter(
+                                    o ->
+                                            o.getStatus()
+                                                    == OrderStatus.CANCELLED
+                            )
+                            .count()
+            );
+
+            stats.put(
+                    "recentOrders",
+                    orders.stream()
+                            .sorted(
+                                    (a, b) ->
+                                            b.getOrderDate()
+                                                    .compareTo(
+                                                            a.getOrderDate()
+                                                    )
+                            )
+                            .limit(10)
+                            .map(this::convertToAdminOrder)
+                            .collect(Collectors.toList())
+            );
+
+            return ResponseEntity.ok(
+                    ApiResponse.success(
+                            "Stats fetched successfully",
+                            stats
+                    )
+            );
+
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Failed to fetch stats: " + e.getMessage()));
+
+            return ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(
+                            ApiResponse.error(
+                                    "Failed to fetch stats: "
+                                            + e.getMessage()
+                            )
+                    );
         }
     }
 
+    // =========================================================
+    // ORDER STATUS UPDATE + EMAIL
+    // =========================================================
+
     @PutMapping("/orders/{orderId}/status")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> updateOrderStatus(
+    public ResponseEntity<ApiResponse<Map<String, Object>>>
+    updateOrderStatus(
             @PathVariable String orderId,
             @RequestBody Map<String, String> request) {
-        try {
-            String statusStr = request.get("status");
-            OrderStatus newStatus = OrderStatus.valueOf(statusStr.toUpperCase());
 
-            Optional<Order> orderOpt = orderRepository.findByOrderId(orderId);
+        try {
+
+            // -------------------------------------------------
+            // Validate request
+            // -------------------------------------------------
+
+            if (request == null || request.get("status") == null) {
+
+                return ResponseEntity
+                        .status(HttpStatus.BAD_REQUEST)
+                        .body(
+                                ApiResponse.error(
+                                        "Status is required"
+                                )
+                        );
+            }
+
+            String statusStr =
+                    request.get("status").trim();
+
+            if (statusStr.isEmpty()) {
+
+                return ResponseEntity
+                        .status(HttpStatus.BAD_REQUEST)
+                        .body(
+                                ApiResponse.error(
+                                        "Status is required"
+                                )
+                        );
+            }
+
+            OrderStatus newStatus;
+
+            try {
+
+                newStatus =
+                        OrderStatus.valueOf(
+                                statusStr.toUpperCase(Locale.ROOT)
+                        );
+
+            } catch (IllegalArgumentException e) {
+
+                return ResponseEntity
+                        .status(HttpStatus.BAD_REQUEST)
+                        .body(
+                                ApiResponse.error(
+                                        "Invalid status value"
+                                )
+                        );
+            }
+
+            // -------------------------------------------------
+            // Find order
+            // -------------------------------------------------
+
+            Optional<Order> orderOpt =
+                    orderRepository.findByOrderId(orderId);
+
             if (orderOpt.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(ApiResponse.error("Order not found"));
+
+                return ResponseEntity
+                        .status(HttpStatus.NOT_FOUND)
+                        .body(
+                                ApiResponse.error(
+                                        "Order not found"
+                                )
+                        );
             }
 
             Order order = orderOpt.get();
-            order.setStatus(newStatus);
-            Order updatedOrder = orderRepository.save(order);
 
-            return ResponseEntity.ok(ApiResponse.success("Order status updated successfully", convertToAdminOrder(updatedOrder)));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ApiResponse.error("Invalid status value"));
+            // -------------------------------------------------
+            // Capture previous status BEFORE changing it
+            // -------------------------------------------------
+
+            OrderStatus oldStatus =
+                    order.getStatus();
+
+            // -------------------------------------------------
+            // If status is already the requested status,
+            // don't send another email.
+            // -------------------------------------------------
+
+            if (oldStatus == newStatus) {
+
+                return ResponseEntity.ok(
+                        ApiResponse.success(
+                                "Order status is already "
+                                        + newStatus,
+                                convertToAdminOrder(order)
+                        )
+                );
+            }
+
+            // -------------------------------------------------
+            // Update status
+            // -------------------------------------------------
+
+            order.setStatus(newStatus);
+
+            Order updatedOrder =
+                    orderRepository.save(order);
+
+            // -------------------------------------------------
+            // Send status-update email
+            //
+            // IMPORTANT:
+            // Email failure must NOT cause the order-status
+            // update itself to fail.
+            // -------------------------------------------------
+
+            sendOrderStatusEmail(
+                    updatedOrder,
+                    oldStatus,
+                    newStatus
+            );
+
+            // -------------------------------------------------
+            // Return updated order
+            // -------------------------------------------------
+
+            return ResponseEntity.ok(
+                    ApiResponse.success(
+                            "Order status updated successfully",
+                            convertToAdminOrder(updatedOrder)
+                    )
+            );
+
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Failed to update order status: " + e.getMessage()));
+
+            return ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(
+                            ApiResponse.error(
+                                    "Failed to update order status: "
+                                            + e.getMessage()
+                            )
+                    );
         }
     }
 
-    // Customer Management - Returns data in format frontend expects
-    @GetMapping("/customers")
-    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getAllCustomers() {
+    // =========================================================
+    // ORDER STATUS EMAIL HELPER
+    // =========================================================
+
+    private void sendOrderStatusEmail(
+            Order order,
+            OrderStatus oldStatus,
+            OrderStatus newStatus) {
+
         try {
-            List<User> users = userRepository.findAll().stream()
-                    .filter(user -> user.getRole() != null && !user.getRole().equals("ADMIN"))
-                    .collect(Collectors.toList());
 
-            List<Map<String, Object>> adminCustomers = users.stream()
-                    .map(this::convertToAdminCustomer)
-                    .collect(Collectors.toList());
+            if (order == null) {
+                return;
+            }
 
-            return ResponseEntity.ok(ApiResponse.success("Customers fetched successfully", adminCustomers));
+            if (newStatus == null) {
+                return;
+            }
+
+            // Don't send duplicate status emails.
+            if (oldStatus == newStatus) {
+                return;
+            }
+
+            if (order.getUserId() == null) {
+
+                System.err.println(
+                        "Zyphora: Cannot send order status email. "
+                                + "Order has no user ID. Order ID="
+                                + order.getOrderId()
+                );
+
+                return;
+            }
+
+            Optional<User> userOpt =
+                    userRepository.findById(
+                            order.getUserId()
+                    );
+
+            if (userOpt.isEmpty()) {
+
+                System.err.println(
+                        "Zyphora: Cannot send order status email. "
+                                + "User not found. User ID="
+                                + order.getUserId()
+                );
+
+                return;
+            }
+
+            User user = userOpt.get();
+
+            if (user.getEmail() == null
+                    || user.getEmail().trim().isEmpty()) {
+
+                System.err.println(
+                        "Zyphora: Cannot send order status email. "
+                                + "User email is missing. User ID="
+                                + user.getId()
+                );
+
+                return;
+            }
+
+            System.out.println(
+                    "Zyphora: Sending order status email. "
+                            + "Order ID="
+                            + order.getOrderId()
+                            + ", "
+                            + oldStatus
+                            + " -> "
+                            + newStatus
+                            + ", Recipient="
+                            + user.getEmail()
+            );
+
+            emailService.sendOrderStatusUpdateEmail(
+                    order,
+                    user,
+                    oldStatus,
+                    newStatus
+            );
+
+            System.out.println(
+                    "Zyphora: Order status email request completed. "
+                            + "Order ID="
+                            + order.getOrderId()
+                            + ", Status="
+                            + newStatus
+            );
+
+        } catch (Exception emailException) {
+
+            // -------------------------------------------------
+            // IMPORTANT:
+            // Email problems should never prevent the admin
+            // from successfully updating the order status.
+            // -------------------------------------------------
+
+            System.err.println(
+                    "Zyphora: Failed to send order status email. "
+                            + "Order ID="
+                            + (order != null
+                            ? order.getOrderId()
+                            : "unknown")
+                            + ", New Status="
+                            + newStatus
+                            + ", Error="
+                            + emailException.getMessage()
+            );
+        }
+    }
+
+    // =========================================================
+    // CUSTOMER MANAGEMENT
+    // =========================================================
+
+    // Returns data in format frontend expects
+    @GetMapping("/customers")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>>
+    getAllCustomers() {
+
+        try {
+
+            List<User> users =
+                    userRepository.findAll()
+                            .stream()
+                            .filter(
+                                    user ->
+                                            user.getRole() != null
+                                                    && !user.getRole()
+                                                    .equals("ADMIN")
+                            )
+                            .collect(Collectors.toList());
+
+            List<Map<String, Object>> adminCustomers =
+                    users.stream()
+                            .map(this::convertToAdminCustomer)
+                            .collect(Collectors.toList());
+
+            return ResponseEntity.ok(
+                    ApiResponse.success(
+                            "Customers fetched successfully",
+                            adminCustomers
+                    )
+            );
+
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Failed to fetch customers: " + e.getMessage()));
+
+            return ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(
+                            ApiResponse.error(
+                                    "Failed to fetch customers: "
+                                            + e.getMessage()
+                            )
+                    );
         }
     }
 }
