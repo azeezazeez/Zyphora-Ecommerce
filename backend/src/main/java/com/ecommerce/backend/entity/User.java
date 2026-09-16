@@ -41,13 +41,6 @@ public class User {
     @Column(name = "zip_code", length = 20)
     private String zipCode;
 
-    /**
-     * TEXT allows long profile-image URLs, including
-     * Base64 and DiceBear-generated URLs.
-     */
-    @Column(name = "profile_image", columnDefinition = "TEXT")
-    private String profileImage;
-
     @Column(length = 20)
     private String role;
 
@@ -57,9 +50,6 @@ public class User {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    /**
-     * Automatically set timestamps when a user is created.
-     */
     @PrePersist
     protected void onCreate() {
         LocalDateTime now = LocalDateTime.now();
@@ -67,9 +57,6 @@ public class User {
         this.updatedAt = now;
     }
 
-    /**
-     * Automatically update the modification timestamp.
-     */
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
