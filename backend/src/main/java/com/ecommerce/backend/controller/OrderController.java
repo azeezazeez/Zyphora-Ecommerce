@@ -773,6 +773,12 @@ public class OrderController {
         }
 
 
+        // --------------------------------------------------------
+        // Capture the previous status before changing it.
+        // --------------------------------------------------------
+
+        OrderStatus oldStatus = order.getStatus();
+
         order.setStatus(
                 OrderStatus.CANCELLED
         );
@@ -780,6 +786,59 @@ public class OrderController {
 
         Order cancelledOrder =
                 orderRepository.save(order);
+
+
+        // --------------------------------------------------------
+        // Send cancellation email.
+        //
+        // Email failure must NOT prevent the cancellation itself
+        // from succeeding.
+        // --------------------------------------------------------
+
+        try {
+
+            User user =
+                    userRepository
+                            .findById(order.getUserId())
+                            .orElse(null);
+
+            if (user != null
+                    && user.getEmail() != null
+                    && !user.getEmail().isBlank()) {
+
+                emailService.sendOrderStatusUpdateEmail(
+                        cancelledOrder,
+                        user,
+                        oldStatus,
+                        OrderStatus.CANCELLED
+                );
+
+                System.out.println(
+                        "Order cancellation email sent successfully to: "
+                                + user.getEmail()
+                );
+
+            } else {
+
+                System.err.println(
+                        "Order cancelled successfully, but cancellation "
+                                + "email could not be sent because the "
+                                + "customer/user/email was not found."
+                );
+            }
+
+        } catch (Exception emailException) {
+
+            System.err.println(
+                    "Order was cancelled successfully, but the "
+                            + "cancellation email could not be sent."
+            );
+
+            System.err.println(
+                    "Email error: "
+                            + emailException.getMessage()
+            );
+        }
 
 
         return ResponseEntity
