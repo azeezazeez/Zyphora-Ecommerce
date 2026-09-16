@@ -2,12 +2,9 @@ package com.ecommerce.backend.service;
 
 import com.ecommerce.backend.entity.Order;
 import com.ecommerce.backend.entity.OrderItem;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -28,7 +25,6 @@ public class EmailService {
             "https://api.brevo.com/v3/smtp/email";
 
     private final RestTemplate restTemplate;
-    private final ObjectMapper objectMapper;
 
     @Value("${brevo.api.key:}")
     private String brevoApiKey;
@@ -41,7 +37,6 @@ public class EmailService {
 
     public EmailService() {
         this.restTemplate = new RestTemplate();
-        this.objectMapper = new ObjectMapper();
     }
 
     // ============================================================
@@ -149,8 +144,11 @@ public class EmailService {
             String subject,
             String htmlContent) {
 
-        String recipient = normalizeEmail(toEmail);
-        String sender = normalizeEmail(senderEmail);
+        String recipient =
+                normalizeEmail(toEmail);
+
+        String sender =
+                normalizeEmail(senderEmail);
 
         if (recipient.isBlank()) {
             throw new IllegalArgumentException(
@@ -164,7 +162,9 @@ public class EmailService {
             );
         }
 
-        if (brevoApiKey == null || brevoApiKey.trim().isBlank()) {
+        if (brevoApiKey == null
+                || brevoApiKey.trim().isBlank()) {
+
             throw new IllegalStateException(
                     "BREVO_API_KEY is not configured in the backend environment."
             );
@@ -194,13 +194,8 @@ public class EmailService {
             );
         }
 
-        /*
-         * IMPORTANT:
-         *
-         * Never print the Brevo API key.
-         * We only log whether it exists and its length.
-         */
-        String apiKey = brevoApiKey.trim();
+        String apiKey =
+                brevoApiKey.trim();
 
         System.out.println(
                 "Zyphora email configuration: "
@@ -212,9 +207,9 @@ public class EmailService {
                         + sender
         );
 
-        // --------------------------------------------------------
-        // Build Brevo request using Maps instead of manual JSON.
-        // --------------------------------------------------------
+        // ========================================================
+        // BREVO REQUEST BODY
+        // ========================================================
 
         Map<String, Object> senderObject =
                 new HashMap<>();
@@ -269,28 +264,6 @@ public class EmailService {
                 htmlContent
         );
 
-        final String jsonBody;
-
-        try {
-            jsonBody =
-                    objectMapper.writeValueAsString(requestBody);
-
-        } catch (JsonProcessingException exception) {
-
-            System.err.println(
-                    "Zyphora: Failed to create Brevo JSON payload."
-            );
-
-            throw new IllegalStateException(
-                    "Unable to prepare email request.",
-                    exception
-            );
-        }
-
-        // --------------------------------------------------------
-        // Headers
-        // --------------------------------------------------------
-
         HttpHeaders headers =
                 new HttpHeaders();
 
@@ -302,23 +275,20 @@ public class EmailService {
                 List.of(MediaType.APPLICATION_JSON)
         );
 
-        /*
-         * Brevo v3 API authentication header.
-         */
         headers.set(
                 "api-key",
                 apiKey
         );
 
-        HttpEntity<String> request =
+        HttpEntity<Map<String, Object>> request =
                 new HttpEntity<>(
-                        jsonBody,
+                        requestBody,
                         headers
                 );
 
-        // --------------------------------------------------------
-        // Call Brevo
-        // --------------------------------------------------------
+        // ========================================================
+        // CALL BREVO
+        // ========================================================
 
         try {
 
@@ -340,45 +310,6 @@ public class EmailService {
                             String.class
                     );
 
-            HttpStatusCode status =
-                    response.getStatusCode();
-
-            String responseBody =
-                    response.getBody();
-
-            if (!status.is2xxSuccessful()) {
-
-                System.err.println(
-                        "================================================"
-                );
-
-                System.err.println(
-                        "BREVO EMAIL FAILED"
-                );
-
-                System.err.println(
-                        "HTTP Status: "
-                                + status.value()
-                );
-
-                System.err.println(
-                        "Brevo Response: "
-                                + safeLog(responseBody)
-                );
-
-                System.err.println(
-                        "================================================"
-                );
-
-                throw new IllegalStateException(
-                        "Brevo rejected the email request. "
-                                + "HTTP "
-                                + status.value()
-                                + ": "
-                                + safeLog(responseBody)
-                );
-            }
-
             System.out.println(
                     "================================================"
             );
@@ -389,7 +320,7 @@ public class EmailService {
 
             System.out.println(
                     "Brevo HTTP Status: "
-                            + status.value()
+                            + response.getStatusCode().value()
             );
 
             System.out.println(
@@ -402,15 +333,6 @@ public class EmailService {
             );
 
         } catch (HttpStatusCodeException exception) {
-
-            /*
-             * THIS IS THE MOST IMPORTANT PART.
-             *
-             * Brevo's actual response will now appear in
-             * Render logs.
-             *
-             * We NEVER print the API key.
-             */
 
             int status =
                     exception.getStatusCode().value();
@@ -501,8 +423,7 @@ public class EmailService {
             );
 
             throw new IllegalStateException(
-                    "Failed to send email through Brevo: "
-                            + safeLog(exception.getMessage()),
+                    "Failed to send email through Brevo.",
                     exception
             );
         }
@@ -525,6 +446,22 @@ public class EmailService {
         String safeAppName =
                 escapeHtml(appName);
 
+        /*
+         * IMPORTANT:
+         *
+         * Do NOT use String.formatted() here.
+         *
+         * The CSS contains values such as:
+         *
+         * width:100%;
+         * height:52px;
+         *
+         * String.formatted() interprets '%' as a format
+         * character and can throw:
+         *
+         * UnknownFormatConversionException: Conversion = ';'
+         */
+
         return """
                 <!DOCTYPE html>
                 <html>
@@ -544,7 +481,7 @@ public class EmailService {
                 ">
 
                     <div style="
-                        width:100%;
+                        width:100%%;
                         padding:30px 15px;
                         box-sizing:border-box;
                     ">
@@ -685,13 +622,13 @@ public class EmailService {
 
                 </body>
                 </html>
-                """.formatted(
-                safeAppName,
-                safeUsername,
-                safeAppName,
-                safeOtp,
-                safeAppName
-        );
+                """
+                .replace("%s", safeAppName)
+                .replaceFirst("%s", safeUsername)
+                .replaceFirst("%s", safeAppName)
+                .replaceFirst("%s", safeOtp)
+                .replaceFirst("%s", safeAppName)
+                .replace("%%", "%");
     }
 
     // ============================================================
@@ -726,7 +663,7 @@ public class EmailService {
                 ">
 
                     <div style="
-                        width:100%;
+                        width:100%%;
                         padding:30px 15px;
                         box-sizing:border-box;
                     ">
@@ -821,10 +758,10 @@ public class EmailService {
 
                 </body>
                 </html>
-                """.formatted(
-                safeAppName,
-                safeOtp
-        );
+                """
+                .replace("%s", safeAppName)
+                .replaceFirst("%s", safeOtp)
+                .replace("%%", "%");
     }
 
     // ============================================================
@@ -884,7 +821,8 @@ public class EmailService {
         if (order.getItems() != null
                 && !order.getItems().isEmpty()) {
 
-            for (OrderItem item : order.getItems()) {
+            for (OrderItem item :
+                    order.getItems()) {
 
                 String productName =
                         item.getProductName() != null
@@ -959,6 +897,13 @@ public class EmailService {
         String safeAppName =
                 escapeHtml(appName);
 
+        /*
+         * IMPORTANT:
+         *
+         * No String.formatted() here.
+         *
+         * This HTML contains CSS percentage values.
+         */
         return """
                 <!DOCTYPE html>
                 <html>
@@ -978,7 +923,7 @@ public class EmailService {
                 ">
 
                     <div style="
-                        width:100%;
+                        width:100%%;
                         padding:30px 15px;
                         box-sizing:border-box;
                     ">
@@ -1069,12 +1014,12 @@ public class EmailService {
                                 ">
 
                                     <table
-                                        width="100%"
+                                        width="100%%"
                                         cellpadding="0"
                                         cellspacing="0"
                                         border="0"
                                         style="
-                                            width:100%;
+                                            width:100%%;
                                             border-collapse:collapse;
                                         ">
 
@@ -1149,17 +1094,17 @@ public class EmailService {
                                 </h3>
 
                                 <div style="
-                                    width:100%;
+                                    width:100%%;
                                     overflow-x:auto;
                                 ">
 
                                     <table
-                                        width="100%"
+                                        width="100%%"
                                         cellpadding="0"
                                         cellspacing="0"
                                         border="0"
                                         style="
-                                            width:100%;
+                                            width:100%%;
                                             min-width:400px;
                                             border-collapse:collapse;
                                             font-size:14px;
@@ -1248,24 +1193,29 @@ public class EmailService {
 
                 </body>
                 </html>
-                """.formatted(
-                safeAppName,
-                safeUsername,
-                safeOrderNumber,
-                safeOrderDate,
-                safeStatus,
-                itemsHtml.toString(),
-                total,
-                safeAppName,
-                safeAppName
-        );
+                """
+                .replace("%%", "%")
+                .replaceFirst("%s", safeAppName)
+                .replaceFirst("%s", safeUsername)
+                .replaceFirst("%s", safeOrderNumber)
+                .replaceFirst("%s", safeOrderDate)
+                .replaceFirst("%s", safeStatus)
+                .replaceFirst("%s", itemsHtml.toString())
+                .replaceFirst("%.2f", String.format(
+                        Locale.ENGLISH,
+                        "%.2f",
+                        total
+                ))
+                .replaceFirst("%s", safeAppName)
+                .replaceFirst("%s", safeAppName);
     }
 
     // ============================================================
     // HELPERS
     // ============================================================
 
-    private String normalizeEmail(String email) {
+    private String normalizeEmail(
+            String email) {
 
         if (email == null) {
             return "";
@@ -1275,7 +1225,8 @@ public class EmailService {
                 .toLowerCase(Locale.ROOT);
     }
 
-    private boolean isValidEmail(String email) {
+    private boolean isValidEmail(
+            String email) {
 
         if (email == null || email.isBlank()) {
             return false;
@@ -1286,10 +1237,8 @@ public class EmailService {
         );
     }
 
-    /*
-     * Prevent accidental logging of extremely large API responses.
-     */
-    private String safeLog(String value) {
+    private String safeLog(
+            String value) {
 
         if (value == null || value.isBlank()) {
             return "(empty response)";
@@ -1312,7 +1261,8 @@ public class EmailService {
     // HTML ESCAPING
     // ============================================================
 
-    private String escapeHtml(String value) {
+    private String escapeHtml(
+            String value) {
 
         if (value == null) {
             return "";
