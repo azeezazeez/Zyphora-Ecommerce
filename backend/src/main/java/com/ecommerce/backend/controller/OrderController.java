@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -65,11 +66,27 @@ public class OrderController {
                             .collect(Collectors.toList());
         }
 
+        /*
+         * IMPORTANT:
+         *
+         * OrderResponse now contains:
+         *
+         * orderId
+         * orderDate
+         * totalAmount
+         * status
+         * paymentMethod
+         * items
+         *
+         * Therefore paymentMethod MUST be passed here.
+         */
+
         return new OrderResponse(
                 order.getOrderId(),
                 order.getOrderDate(),
                 order.getTotalAmount(),
                 order.getStatus(),
+                order.getPaymentMethod(),
                 itemResponses
         );
     }
@@ -133,6 +150,17 @@ public class OrderController {
             // 3. VALIDATE PAYMENT METHOD
             // ====================================================
 
+            /*
+             * Supported payment methods:
+             *
+             * COD  -> Cash on Delivery
+             * UPI  -> UPI
+             * CARD -> Credit / Debit Card
+             *
+             * If the frontend does not send a payment method,
+             * COD is used as the backward-compatible default.
+             */
+
             String paymentMethod = "COD";
 
             if (request != null
@@ -142,7 +170,7 @@ public class OrderController {
                 paymentMethod =
                         request.get("paymentMethod")
                                 .trim()
-                                .toUpperCase();
+                                .toUpperCase(Locale.ROOT);
             }
 
             if (!paymentMethod.equals("COD")
@@ -173,13 +201,19 @@ public class OrderController {
             );
 
             /*
-             * Save only the selected payment method.
+             * Store ONLY the selected payment method.
              *
              * IMPORTANT:
-             * Card number, CVV, expiry date, UPI credentials,
-             * or other sensitive payment information are NOT
-             * stored in the Zyphora database.
+             *
+             * Card number
+             * CVV
+             * Expiry date
+             * UPI credentials
+             * Other sensitive payment information
+             *
+             * are NOT stored in the Zyphora database.
              */
+
             order.setPaymentMethod(paymentMethod);
 
 
@@ -277,6 +311,24 @@ public class OrderController {
                                                     + product.getName()
                                                     + ". Available: "
                                                     + product.getStock()
+                                    )
+                            );
+                }
+
+
+                // ------------------------------------------------
+                // Validate product price
+                // ------------------------------------------------
+
+                if (product.getPrice() == null
+                        || product.getPrice() < 0) {
+
+                    return ResponseEntity
+                            .status(HttpStatus.BAD_REQUEST)
+                            .body(
+                                    ApiResponse.error(
+                                            "Invalid price for product: "
+                                                    + product.getName()
                                     )
                             );
                 }
@@ -412,10 +464,11 @@ public class OrderController {
             // ====================================================
 
             /*
-             * The order has already been saved and the cart has
-             * already been cleared.
+             * The order is already saved and the cart is already
+             * cleared before the email is sent.
              *
-             * If Brevo/email fails, the order remains successful.
+             * Therefore, if Brevo/email fails, the order itself
+             * remains successful.
              */
 
             try {
@@ -504,16 +557,19 @@ public class OrderController {
                         );
             }
 
+
             List<Order> orders =
                     orderRepository
                             .findByUserIdOrderByOrderDateDesc(
                                     userId
                             );
 
+
             List<OrderResponse> response =
                     orders.stream()
                             .map(this::convertToOrderResponse)
                             .collect(Collectors.toList());
+
 
             return ResponseEntity
                     .ok(
@@ -522,6 +578,7 @@ public class OrderController {
                                     response
                             )
                     );
+
 
         } catch (Exception e) {
 
@@ -567,6 +624,7 @@ public class OrderController {
                     );
         }
 
+
         return ResponseEntity
                 .ok(
                         ApiResponse.success(
@@ -600,15 +658,18 @@ public class OrderController {
                     );
         }
 
+
         Integer orderCount =
                 orderRepository.getOrderCountByUserId(
                         userId
                 );
 
+
         Double totalSpent =
                 orderRepository.getTotalSpentByUserId(
                         userId
                 );
+
 
         List<OrderHistoryResponse> recentOrderSummaries =
                 orderRepository
@@ -628,8 +689,10 @@ public class OrderController {
                         )
                         .collect(Collectors.toList());
 
+
         Map<String, Object> summary =
                 new HashMap<>();
+
 
         summary.put(
                 "totalOrders",
@@ -638,6 +701,7 @@ public class OrderController {
                         : 0
         );
 
+
         summary.put(
                 "totalSpent",
                 totalSpent != null
@@ -645,10 +709,12 @@ public class OrderController {
                         : 0.0
         );
 
+
         summary.put(
                 "recentOrders",
                 recentOrderSummaries
         );
+
 
         return ResponseEntity
                 .ok(
@@ -688,6 +754,11 @@ public class OrderController {
                     );
         }
 
+
+        // --------------------------------------------------------
+        // Only pending orders can be cancelled
+        // --------------------------------------------------------
+
         if (order.getStatus() != OrderStatus.PENDING) {
 
             return ResponseEntity
@@ -701,12 +772,15 @@ public class OrderController {
                     );
         }
 
+
         order.setStatus(
                 OrderStatus.CANCELLED
         );
 
+
         Order cancelledOrder =
                 orderRepository.save(order);
+
 
         return ResponseEntity
                 .ok(
