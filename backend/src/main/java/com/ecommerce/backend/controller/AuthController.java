@@ -19,6 +19,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -123,7 +124,8 @@ public class AuthController {
             return false;
         }
 
-        String value = email.trim();
+        String value =
+                email.trim();
 
         String[] parts =
                 value.split("@", -1);
@@ -132,8 +134,11 @@ public class AuthController {
             return false;
         }
 
-        String username = parts[0];
-        String domain = parts[1];
+        String username =
+                parts[0];
+
+        String domain =
+                parts[1];
 
         if (!domain.equalsIgnoreCase("gmail.com")) {
             return false;
@@ -141,23 +146,24 @@ public class AuthController {
 
         if (username.length() < 1
                 || username.length() > 30) {
+
             return false;
         }
 
-        if (!username.matches("[a-zA-Z0-9.]+")) {
+        if (!username.matches(
+                "[a-zA-Z0-9.]+"
+        )) {
+
             return false;
         }
 
         if (username.startsWith(".")
                 || username.endsWith(".")) {
+
             return false;
         }
 
-        if (username.contains("..")) {
-            return false;
-        }
-
-        return true;
+        return !username.contains("..");
     }
 
     // ============================================================
@@ -170,6 +176,7 @@ public class AuthController {
             @RequestBody Map<String, String> request) {
 
         if (request == null) {
+
             return ResponseEntity
                     .badRequest()
                     .body(
@@ -195,7 +202,9 @@ public class AuthController {
         // Email validation
         // --------------------------------------------------------
 
-        if (email == null || email.isBlank()) {
+        if (email == null
+                || email.isBlank()) {
+
             return ResponseEntity
                     .badRequest()
                     .body(
@@ -205,9 +214,12 @@ public class AuthController {
                     );
         }
 
-        email = email.trim().toLowerCase();
+        email =
+                email.trim()
+                        .toLowerCase(Locale.ROOT);
 
         if (!isValidGmail(email)) {
+
             return ResponseEntity
                     .badRequest()
                     .body(
@@ -224,7 +236,9 @@ public class AuthController {
 
         if (username == null
                 || !username.trim()
-                .matches("[A-Za-z0-9._-]{3,30}")) {
+                .matches(
+                        "[A-Za-z0-9._-]{3,30}"
+                )) {
 
             return ResponseEntity
                     .badRequest()
@@ -238,7 +252,8 @@ public class AuthController {
                     );
         }
 
-        username = username.trim();
+        username =
+                username.trim();
 
         // --------------------------------------------------------
         // Password validation
@@ -247,7 +262,8 @@ public class AuthController {
         if (password == null
                 || !password.matches(
                 "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)"
-                        + "(?=.*[^A-Za-z0-9]).{8,72}$")) {
+                        + "(?=.*[^A-Za-z0-9]).{8,72}$"
+        )) {
 
             return ResponseEntity
                     .badRequest()
@@ -277,9 +293,9 @@ public class AuthController {
                     );
         }
 
-        // --------------------------------------------------------
-        // Request signup OTP
-        // --------------------------------------------------------
+        // ========================================================
+        // REQUEST SIGNUP OTP
+        // ========================================================
 
         try {
 
@@ -311,25 +327,99 @@ public class AuthController {
                             )
                     );
 
-        } catch (IllegalStateException e) {
-
-            String message = e.getMessage();
+        } catch (IllegalArgumentException exception) {
 
             /*
-             * Only the resend cooldown should return 429.
-             * Email/Brevo failures should not be reported as
-             * "Too Many Requests".
+             * Validation/business errors.
+             */
+            System.err.println(
+                    "Signup validation error: "
+                            + exception.getMessage()
+            );
+
+            return ResponseEntity
+                    .badRequest()
+                    .body(
+                            ApiResponse.error(
+                                    exception.getMessage()
+                            )
+                    );
+
+        } catch (IllegalStateException exception) {
+
+            String message =
+                    exception.getMessage();
+
+            /*
+             * OTP resend cooldown.
              */
             if (message != null
                     && message.startsWith("Please wait")) {
 
                 return ResponseEntity
-                        .status(HttpStatus.TOO_MANY_REQUESTS)
+                        .status(
+                                HttpStatus.TOO_MANY_REQUESTS
+                        )
                         .body(
-                                ApiResponse.error(message)
+                                ApiResponse.error(
+                                        message
+                                )
                         );
             }
 
+            /*
+             * IMPORTANT:
+             *
+             * The complete internal exception is logged,
+             * including the actual Brevo response.
+             *
+             * The API response remains safe.
+             */
+            System.err.println(
+                    "================================================"
+            );
+
+            System.err.println(
+                    "SIGNUP OTP SERVICE ERROR"
+            );
+
+            System.err.println(
+                    "Email: "
+                            + email
+            );
+
+            System.err.println(
+                    "Error type: "
+                            + exception.getClass().getName()
+            );
+
+            System.err.println(
+                    "Error message: "
+                            + exception.getMessage()
+            );
+
+            if (exception.getCause() != null) {
+
+                System.err.println(
+                        "Cause type: "
+                                + exception
+                                .getCause()
+                                .getClass()
+                                .getName()
+                );
+
+                System.err.println(
+                        "Cause message: "
+                                + exception
+                                .getCause()
+                                .getMessage()
+                );
+            }
+
+            System.err.println(
+                    "================================================"
+            );
+
             return ResponseEntity
                     .status(HttpStatus.BAD_GATEWAY)
                     .body(
@@ -338,23 +428,44 @@ public class AuthController {
                             )
                     );
 
-        } catch (IllegalArgumentException e) {
+        } catch (Exception exception) {
+
+            /*
+             * Unexpected signup error.
+             */
+
+            System.err.println(
+                    "================================================"
+            );
+
+            System.err.println(
+                    "UNEXPECTED SIGNUP ERROR"
+            );
+
+            System.err.println(
+                    "Email: "
+                            + email
+            );
+
+            System.err.println(
+                    "Error type: "
+                            + exception.getClass().getName()
+            );
+
+            System.err.println(
+                    "Error message: "
+                            + exception.getMessage()
+            );
+
+            System.err.println(
+                    "================================================"
+            );
 
             return ResponseEntity
-                    .status(HttpStatus.CONFLICT)
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(
                             ApiResponse.error(
-                                    e.getMessage()
-                            )
-                    );
-
-        } catch (RuntimeException e) {
-
-            return ResponseEntity
-                    .status(HttpStatus.BAD_GATEWAY)
-                    .body(
-                            ApiResponse.error(
-                                    "Unable to send OTP email. Please try again later."
+                                    "Unable to process registration right now."
                             )
                     );
         }
@@ -371,6 +482,7 @@ public class AuthController {
             @RequestBody VerifyOtpRequest request) {
 
         if (request == null) {
+
             return ResponseEntity
                     .badRequest()
                     .body(
@@ -410,7 +522,7 @@ public class AuthController {
                     signupOtpService.verifyOtp(
                             request.getEmail()
                                     .trim()
-                                    .toLowerCase(),
+                                    .toLowerCase(Locale.ROOT),
                             request.getOtp().trim()
                     );
 
@@ -423,11 +535,30 @@ public class AuthController {
             Map<String, Object> data =
                     new HashMap<>();
 
-            data.put("id", saved.getId());
-            data.put("email", saved.getEmail());
-            data.put("username", saved.getUsername());
-            data.put("role", saved.getRole());
-            data.put("token", token);
+            data.put(
+                    "id",
+                    saved.getId()
+            );
+
+            data.put(
+                    "email",
+                    saved.getEmail()
+            );
+
+            data.put(
+                    "username",
+                    saved.getUsername()
+            );
+
+            data.put(
+                    "role",
+                    saved.getRole()
+            );
+
+            data.put(
+                    "token",
+                    token
+            );
 
             return ResponseEntity
                     .status(HttpStatus.CREATED)
@@ -438,13 +569,28 @@ public class AuthController {
                             )
                     );
 
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException exception) {
 
             return ResponseEntity
                     .badRequest()
                     .body(
                             ApiResponse.error(
-                                    e.getMessage()
+                                    exception.getMessage()
+                            )
+                    );
+
+        } catch (Exception exception) {
+
+            System.err.println(
+                    "OTP verification error: "
+                            + exception.getMessage()
+            );
+
+            return ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(
+                            ApiResponse.error(
+                                    "Unable to verify OTP right now."
                             )
                     );
         }
@@ -460,6 +606,7 @@ public class AuthController {
             @RequestBody Map<String, String> request) {
 
         if (request == null) {
+
             return ResponseEntity
                     .badRequest()
                     .body(
@@ -489,7 +636,9 @@ public class AuthController {
                     );
         }
 
-        email = email.trim().toLowerCase();
+        email =
+                email.trim()
+                        .toLowerCase(Locale.ROOT);
 
         Optional<User> userOpt =
                 userRepository.findByEmail(email);
@@ -497,7 +646,8 @@ public class AuthController {
         if (userOpt.isEmpty()
                 || !passwordEncoder.matches(
                 password,
-                userOpt.get().getPassword())) {
+                userOpt.get().getPassword()
+        )) {
 
             return ResponseEntity
                     .status(HttpStatus.UNAUTHORIZED)
@@ -557,29 +707,48 @@ public class AuthController {
                     );
         }
 
-        boolean sent =
-                forgotPasswordService.generateAndSendOtp(
-                        request.getEmail()
-                );
+        try {
 
-        if (!sent) {
+            boolean sent =
+                    forgotPasswordService
+                            .generateAndSendOtp(
+                                    request.getEmail()
+                            );
+
+            if (!sent) {
+
+                return ResponseEntity
+                        .status(HttpStatus.NOT_FOUND)
+                        .body(
+                                ApiResponse.error(
+                                        "No account found with that email"
+                                )
+                        );
+            }
 
             return ResponseEntity
-                    .status(HttpStatus.NOT_FOUND)
+                    .ok(
+                            ApiResponse.success(
+                                    "OTP sent successfully",
+                                    null
+                            )
+                    );
+
+        } catch (Exception exception) {
+
+            System.err.println(
+                    "Forgot password email error: "
+                            + exception.getMessage()
+            );
+
+            return ResponseEntity
+                    .status(HttpStatus.BAD_GATEWAY)
                     .body(
                             ApiResponse.error(
-                                    "No account found with that email"
+                                    "Unable to send password reset email."
                             )
                     );
         }
-
-        return ResponseEntity
-                .ok(
-                        ApiResponse.success(
-                                "OTP sent successfully",
-                                null
-                        )
-                );
     }
 
     // ============================================================
@@ -592,6 +761,7 @@ public class AuthController {
             @RequestBody ResetPasswordRequest request) {
 
         if (request == null) {
+
             return ResponseEntity
                     .badRequest()
                     .body(
@@ -637,31 +807,49 @@ public class AuthController {
                     );
         }
 
-        boolean reset =
-                forgotPasswordService.resetPassword(
-                        request.getEmail(),
-                        request.getOtp(),
-                        request.getNewPassword()
-                );
+        try {
 
-        if (!reset) {
+            boolean reset =
+                    forgotPasswordService.resetPassword(
+                            request.getEmail(),
+                            request.getOtp(),
+                            request.getNewPassword()
+                    );
+
+            if (!reset) {
+
+                return ResponseEntity
+                        .status(HttpStatus.BAD_REQUEST)
+                        .body(
+                                ApiResponse.error(
+                                        "Invalid or expired OTP"
+                                )
+                        );
+            }
+
+            return ResponseEntity
+                    .ok(
+                            ApiResponse.success(
+                                    "Password reset successful",
+                                    null
+                            )
+                    );
+
+        } catch (Exception exception) {
+
+            System.err.println(
+                    "Password reset error: "
+                            + exception.getMessage()
+            );
 
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
                     .body(
                             ApiResponse.error(
-                                    "Invalid or expired OTP"
+                                    exception.getMessage()
                             )
                     );
         }
-
-        return ResponseEntity
-                .ok(
-                        ApiResponse.success(
-                                "Password reset successful",
-                                null
-                        )
-                );
     }
 
     // ============================================================
@@ -677,6 +865,7 @@ public class AuthController {
                 getAuthenticatedUser();
 
         if (user == null) {
+
             return ResponseEntity
                     .status(HttpStatus.UNAUTHORIZED)
                     .body(
@@ -709,6 +898,7 @@ public class AuthController {
                 getAuthenticatedUser();
 
         if (user == null) {
+
             return ResponseEntity
                     .status(HttpStatus.UNAUTHORIZED)
                     .body(
@@ -719,6 +909,7 @@ public class AuthController {
         }
 
         if (request == null) {
+
             return ResponseEntity
                     .badRequest()
                     .body(
@@ -736,6 +927,7 @@ public class AuthController {
                     );
 
             if (newUsername == null) {
+
                 return ResponseEntity
                         .badRequest()
                         .body(
@@ -758,10 +950,13 @@ public class AuthController {
                         );
             }
 
-            user.setUsername(newUsername);
+            user.setUsername(
+                    newUsername
+            );
         }
 
         if (request.containsKey("phoneNumber")) {
+
             user.setPhone(
                     nullOrTrimmed(
                             request.get("phoneNumber")
@@ -770,6 +965,7 @@ public class AuthController {
         }
 
         if (request.containsKey("address")) {
+
             user.setAddress(
                     nullOrTrimmed(
                             request.get("address")
@@ -778,6 +974,7 @@ public class AuthController {
         }
 
         if (request.containsKey("city")) {
+
             user.setCity(
                     nullOrTrimmed(
                             request.get("city")
@@ -786,6 +983,7 @@ public class AuthController {
         }
 
         if (request.containsKey("state")) {
+
             user.setState(
                     nullOrTrimmed(
                             request.get("state")
@@ -794,6 +992,7 @@ public class AuthController {
         }
 
         if (request.containsKey("country")) {
+
             user.setCountry(
                     nullOrTrimmed(
                             request.get("country")
@@ -802,6 +1001,7 @@ public class AuthController {
         }
 
         if (request.containsKey("zipCode")) {
+
             user.setZipCode(
                     nullOrTrimmed(
                             request.get("zipCode")
@@ -810,6 +1010,7 @@ public class AuthController {
         }
 
         if (request.containsKey("profileImage")) {
+
             user.setProfileImage(
                     nullOrTrimmed(
                             request.get("profileImage")
@@ -843,6 +1044,7 @@ public class AuthController {
                 getAuthenticatedUser();
 
         if (user == null) {
+
             return ResponseEntity
                     .status(HttpStatus.UNAUTHORIZED)
                     .body(
@@ -853,6 +1055,7 @@ public class AuthController {
         }
 
         if (request == null) {
+
             return ResponseEntity
                     .badRequest()
                     .body(
@@ -885,7 +1088,8 @@ public class AuthController {
 
         if (!newPassword.matches(
                 "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)"
-                        + "(?=.*[^A-Za-z0-9]).{8,72}$")) {
+                        + "(?=.*[^A-Za-z0-9]).{8,72}$"
+        )) {
 
             return ResponseEntity
                     .badRequest()
@@ -901,7 +1105,8 @@ public class AuthController {
 
         if (!passwordEncoder.matches(
                 currentPassword,
-                user.getPassword())) {
+                user.getPassword()
+        )) {
 
             return ResponseEntity
                     .status(HttpStatus.UNAUTHORIZED)
@@ -942,6 +1147,7 @@ public class AuthController {
                 getAuthenticatedUser();
 
         if (user == null) {
+
             return ResponseEntity
                     .status(HttpStatus.UNAUTHORIZED)
                     .body(
