@@ -2,7 +2,6 @@ package com.ecommerce.backend.service;
 
 import com.ecommerce.backend.entity.Order;
 import com.ecommerce.backend.entity.OrderItem;
-
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -17,24 +16,10 @@ import java.util.Locale;
 @Service
 public class EmailService {
 
-    // ============================================================
-    // BREVO API
-    // ============================================================
-
     private static final String BREVO_API_URL =
             "https://api.brevo.com/v3/smtp/email";
 
-
-    // ============================================================
-    // DEPENDENCIES
-    // ============================================================
-
     private final RestTemplate restTemplate;
-
-
-    // ============================================================
-    // CONFIGURATION
-    // ============================================================
 
     @Value("${brevo.api.key}")
     private String brevoApiKey;
@@ -45,15 +30,9 @@ public class EmailService {
     @Value("${app.name:Zyphora}")
     private String appName;
 
-
-    // ============================================================
-    // CONSTRUCTOR
-    // ============================================================
-
     public EmailService() {
         this.restTemplate = new RestTemplate();
     }
-
 
     // ============================================================
     // SIGNUP OTP
@@ -72,11 +51,10 @@ public class EmailService {
         String subject =
                 "Verify your " + appName + " account";
 
-        String html =
-                buildSignupOtpEmail(
-                        recipientName,
-                        otp
-                );
+        String html = buildSignupOtpEmail(
+                recipientName,
+                otp
+        );
 
         sendEmail(
                 toEmail,
@@ -85,7 +63,6 @@ public class EmailService {
                 html
         );
     }
-
 
     // ============================================================
     // PASSWORD RESET OTP
@@ -108,7 +85,6 @@ public class EmailService {
                 html
         );
     }
-
 
     // ============================================================
     // ORDER CONFIRMATION
@@ -152,9 +128,8 @@ public class EmailService {
         );
     }
 
-
     // ============================================================
-    // COMMON BREVO EMAIL SENDER
+    // COMMON EMAIL SENDER
     // ============================================================
 
     private void sendEmail(
@@ -163,45 +138,23 @@ public class EmailService {
             String subject,
             String htmlContent) {
 
-        // --------------------------------------------------------
-        // Validate recipient
-        // --------------------------------------------------------
-
         if (toEmail == null || toEmail.isBlank()) {
-
             throw new IllegalArgumentException(
                     "Recipient email cannot be empty."
             );
         }
 
-
-        // --------------------------------------------------------
-        // Validate Brevo API key
-        // --------------------------------------------------------
-
         if (brevoApiKey == null || brevoApiKey.isBlank()) {
-
             throw new IllegalStateException(
                     "BREVO_API_KEY is not configured."
             );
         }
 
-
-        // --------------------------------------------------------
-        // Validate sender
-        // --------------------------------------------------------
-
         if (senderEmail == null || senderEmail.isBlank()) {
-
             throw new IllegalStateException(
                     "USER_MAIL is not configured."
             );
         }
-
-
-        // --------------------------------------------------------
-        // HTTP headers
-        // --------------------------------------------------------
 
         HttpHeaders headers = new HttpHeaders();
 
@@ -217,11 +170,6 @@ public class EmailService {
         headers.setAccept(
                 List.of(MediaType.APPLICATION_JSON)
         );
-
-
-        // --------------------------------------------------------
-        // Brevo JSON request
-        // --------------------------------------------------------
 
         String jsonBody =
                 "{"
@@ -253,21 +201,11 @@ public class EmailService {
                         + "\""
                         + "}";
 
-
-        // --------------------------------------------------------
-        // HTTP request
-        // --------------------------------------------------------
-
         HttpEntity<String> request =
                 new HttpEntity<>(
                         jsonBody,
                         headers
                 );
-
-
-        // --------------------------------------------------------
-        // Send email
-        // --------------------------------------------------------
 
         try {
 
@@ -301,7 +239,6 @@ public class EmailService {
         }
     }
 
-
     // ============================================================
     // SIGNUP OTP EMAIL
     // ============================================================
@@ -310,28 +247,17 @@ public class EmailService {
             String username,
             String otp) {
 
-        String safeUsername =
-                escapeHtml(username);
+        String safeUsername = escapeHtml(username);
+        String safeOtp = escapeHtml(otp);
+        String safeAppName = escapeHtml(appName);
 
-        String safeOtp =
-                escapeHtml(otp);
-
-        String safeAppName =
-                escapeHtml(appName);
-
-
-        StringBuilder html =
-                new StringBuilder();
-
-
-        html.append("""
+        return """
                 <!DOCTYPE html>
                 <html>
                 <head>
                     <meta charset="UTF-8">
                     <meta name="viewport"
                           content="width=device-width, initial-scale=1.0">
-
                     <title>Verify your account</title>
                 </head>
 
@@ -342,233 +268,157 @@ public class EmailService {
                     font-family:Arial,Helvetica,sans-serif;
                     color:#172033;
                 ">
-                """);
 
+                    <div style="
+                        width:100%;
+                        padding:30px 15px;
+                        box-sizing:border-box;
+                    ">
 
-        html.append("""
-                <div style="
-                    width:100%;
-                    padding:30px 15px;
-                    box-sizing:border-box;
-                ">
-                """);
+                        <div style="
+                            max-width:600px;
+                            margin:0 auto;
+                            background:#ffffff;
+                            border:1px solid #e5e7eb;
+                            border-radius:18px;
+                            overflow:hidden;
+                        ">
 
+                            <div style="
+                                padding:32px 20px;
+                                text-align:center;
+                                background:linear-gradient(
+                                    135deg,
+                                    #fce7f3,
+                                    #dbeafe
+                                );
+                            ">
 
-        html.append("""
-                <div style="
-                    max-width:600px;
-                    margin:0 auto;
-                    background:#ffffff;
-                    border:1px solid #e5e7eb;
-                    border-radius:18px;
-                    overflow:hidden;
-                ">
-                """);
+                                <div style="
+                                    width:52px;
+                                    height:52px;
+                                    line-height:52px;
+                                    margin:0 auto;
+                                    background:#ffffff;
+                                    border-radius:15px;
+                                    color:#4f46e5;
+                                    font-size:26px;
+                                    font-weight:800;
+                                ">
+                                    Z
+                                </div>
 
+                                <h1 style="
+                                    margin:16px 0 0;
+                                    font-size:26px;
+                                    line-height:1.3;
+                                    color:#172033;
+                                ">
+                                    Welcome to %s
+                                </h1>
 
-        // --------------------------------------------------------
-        // Header
-        // --------------------------------------------------------
+                            </div>
 
-        html.append("""
-                <div style="
-                    padding:32px 20px;
-                    text-align:center;
-                    background:linear-gradient(
-                        135deg,
-                        #fce7f3,
-                        #dbeafe
-                    );
-                ">
-                """);
+                            <div style="
+                                padding:32px 25px;
+                            ">
 
+                                <h2 style="
+                                    margin:0 0 16px;
+                                    font-size:21px;
+                                    color:#172033;
+                                ">
+                                    Verify your email
+                                </h2>
 
-        html.append("""
-                <div style="
-                    width:52px;
-                    height:52px;
-                    line-height:52px;
-                    margin:0 auto;
-                    background:#ffffff;
-                    border-radius:15px;
-                    color:#4f46e5;
-                    font-size:26px;
-                    font-weight:800;
-                ">
-                    Z
-                </div>
-                """);
+                                <p style="
+                                    margin:0 0 15px;
+                                    color:#667085;
+                                    font-size:15px;
+                                    line-height:1.7;
+                                ">
+                                    Hi %s,
+                                </p>
 
+                                <p style="
+                                    margin:0;
+                                    color:#667085;
+                                    font-size:15px;
+                                    line-height:1.7;
+                                ">
+                                    Thank you for creating your %s account.
+                                    Enter the verification code below to
+                                    complete your registration.
+                                </p>
 
-        html.append("""
-                <h1 style="
-                    margin:16px 0 0;
-                    font-size:26px;
-                    line-height:1.3;
-                    color:#172033;
-                ">
-                """);
+                                <div style="
+                                    margin:28px 0;
+                                    padding:24px 15px;
+                                    background:#f8fafc;
+                                    border:1px dashed #cbd5e1;
+                                    border-radius:14px;
+                                    text-align:center;
+                                ">
 
-        html.append("Welcome to ")
-                .append(safeAppName);
+                                    <div style="
+                                        color:#64748b;
+                                        font-size:11px;
+                                        text-transform:uppercase;
+                                        letter-spacing:2px;
+                                        margin-bottom:12px;
+                                    ">
+                                        Verification Code
+                                    </div>
 
-        html.append("""
-                </h1>
-                </div>
-                """);
+                                    <div style="
+                                        color:#4f46e5;
+                                        font-size:34px;
+                                        font-weight:800;
+                                        letter-spacing:7px;
+                                        word-break:break-all;
+                                    ">
+                                        %s
+                                    </div>
 
+                                </div>
 
-        // --------------------------------------------------------
-        // Content
-        // --------------------------------------------------------
+                                <p style="
+                                    margin:0;
+                                    color:#94a3b8;
+                                    font-size:13px;
+                                    line-height:1.6;
+                                ">
+                                    This OTP expires in 5 minutes.
+                                    If you did not create this account,
+                                    you can safely ignore this email.
+                                </p>
 
-        html.append("""
-                <div style="
-                    padding:32px 25px;
-                ">
-                """);
+                            </div>
 
+                            <div style="
+                                padding:20px;
+                                text-align:center;
+                                border-top:1px solid #eef2f7;
+                                color:#94a3b8;
+                                font-size:12px;
+                            ">
+                                © %s. All rights reserved.
+                            </div>
 
-        html.append("""
-                <h2 style="
-                    margin:0 0 16px;
-                    font-size:21px;
-                    color:#172033;
-                ">
-                    Verify your email
-                </h2>
-                """);
+                        </div>
 
-
-        html.append("""
-                <p style="
-                    margin:0 0 15px;
-                    color:#667085;
-                    font-size:15px;
-                    line-height:1.7;
-                ">
-                    Hi 
-                """);
-
-        html.append(safeUsername);
-
-        html.append("""
-                ,
-                </p>
-                """);
-
-
-        html.append("""
-                <p style="
-                    margin:0;
-                    color:#667085;
-                    font-size:15px;
-                    line-height:1.7;
-                ">
-                    Thank you for creating your Zyphora account.
-                    Enter the verification code below to complete
-                    your registration.
-                </p>
-                """);
-
-
-        // --------------------------------------------------------
-        // OTP
-        // --------------------------------------------------------
-
-        html.append("""
-                <div style="
-                    margin:28px 0;
-                    padding:24px 15px;
-                    background:#f8fafc;
-                    border:1px dashed #cbd5e1;
-                    border-radius:14px;
-                    text-align:center;
-                    box-sizing:border-box;
-                ">
-                """);
-
-
-        html.append("""
-                <div style="
-                    color:#64748b;
-                    font-size:11px;
-                    text-transform:uppercase;
-                    letter-spacing:2px;
-                    margin-bottom:12px;
-                ">
-                    Verification Code
-                </div>
-                """);
-
-
-        html.append("""
-                <div style="
-                    color:#4f46e5;
-                    font-size:34px;
-                    font-weight:800;
-                    letter-spacing:7px;
-                    word-break:break-all;
-                ">
-                """);
-
-        html.append(safeOtp);
-
-        html.append("""
-                </div>
-                </div>
-                """);
-
-
-        html.append("""
-                <p style="
-                    margin:0;
-                    color:#94a3b8;
-                    font-size:13px;
-                    line-height:1.6;
-                ">
-                    If you did not create this account,
-                    you can safely ignore this email.
-                </p>
-                </div>
-                """);
-
-
-        // --------------------------------------------------------
-        // Footer
-        // --------------------------------------------------------
-
-        html.append("""
-                <div style="
-                    padding:20px;
-                    text-align:center;
-                    border-top:1px solid #eef2f7;
-                    color:#94a3b8;
-                    font-size:12px;
-                ">
-                © 
-                """);
-
-        html.append(safeAppName);
-
-        html.append("""
-                . All rights reserved.
-                </div>
-                """);
-
-
-        html.append("""
-                </div>
-                </div>
+                    </div>
 
                 </body>
                 </html>
-                """);
-
-
-        return html.toString();
+                """.formatted(
+                safeAppName,
+                safeUsername,
+                safeAppName,
+                safeOtp,
+                safeAppName
+        );
     }
-
 
     // ============================================================
     // PASSWORD RESET EMAIL
@@ -577,25 +427,16 @@ public class EmailService {
     private String buildPasswordResetEmail(
             String otp) {
 
-        String safeOtp =
-                escapeHtml(otp);
+        String safeOtp = escapeHtml(otp);
+        String safeAppName = escapeHtml(appName);
 
-        String safeAppName =
-                escapeHtml(appName);
-
-
-        StringBuilder html =
-                new StringBuilder();
-
-
-        html.append("""
+        return """
                 <!DOCTYPE html>
                 <html>
                 <head>
                     <meta charset="UTF-8">
                     <meta name="viewport"
                           content="width=device-width, initial-scale=1.0">
-
                     <title>Password Reset</title>
                 </head>
 
@@ -606,149 +447,108 @@ public class EmailService {
                     font-family:Arial,Helvetica,sans-serif;
                     color:#172033;
                 ">
-                """);
 
+                    <div style="
+                        width:100%;
+                        padding:30px 15px;
+                        box-sizing:border-box;
+                    ">
 
-        html.append("""
-                <div style="
-                    width:100%;
-                    padding:30px 15px;
-                    box-sizing:border-box;
-                ">
-                """);
+                        <div style="
+                            max-width:600px;
+                            margin:0 auto;
+                            background:#ffffff;
+                            border:1px solid #e5e7eb;
+                            border-radius:18px;
+                            padding:30px 25px;
+                            box-sizing:border-box;
+                        ">
 
+                            <div style="
+                                width:52px;
+                                height:52px;
+                                line-height:52px;
+                                text-align:center;
+                                background:#eef2ff;
+                                border-radius:15px;
+                                color:#4f46e5;
+                                font-size:26px;
+                                font-weight:800;
+                            ">
+                                Z
+                            </div>
 
-        html.append("""
-                <div style="
-                    max-width:600px;
-                    margin:0 auto;
-                    background:#ffffff;
-                    border:1px solid #e5e7eb;
-                    border-radius:18px;
-                    padding:30px 25px;
-                    box-sizing:border-box;
-                ">
-                """);
+                            <h1 style="
+                                margin:20px 0 10px;
+                                font-size:25px;
+                                line-height:1.3;
+                                color:#172033;
+                            ">
+                                Reset your password
+                            </h1>
 
+                            <p style="
+                                margin:0;
+                                color:#667085;
+                                line-height:1.7;
+                                font-size:15px;
+                            ">
+                                We received a request to reset your
+                                %s account password.
+                            </p>
 
-        // --------------------------------------------------------
-        // Logo
-        // --------------------------------------------------------
+                            <div style="
+                                margin:28px 0;
+                                padding:24px 15px;
+                                background:#f8fafc;
+                                border-radius:14px;
+                                text-align:center;
+                            ">
 
-        html.append("""
-                <div style="
-                    width:52px;
-                    height:52px;
-                    line-height:52px;
-                    text-align:center;
-                    background:#eef2ff;
-                    border-radius:15px;
-                    color:#4f46e5;
-                    font-size:26px;
-                    font-weight:800;
-                ">
-                    Z
-                </div>
-                """);
+                                <div style="
+                                    color:#64748b;
+                                    font-size:11px;
+                                    text-transform:uppercase;
+                                    letter-spacing:2px;
+                                    margin-bottom:12px;
+                                ">
+                                    Password Reset Code
+                                </div>
 
+                                <div style="
+                                    color:#4f46e5;
+                                    font-size:34px;
+                                    font-weight:800;
+                                    letter-spacing:7px;
+                                    word-break:break-all;
+                                ">
+                                    %s
+                                </div>
 
-        html.append("""
-                <h1 style="
-                    margin:20px 0 10px;
-                    font-size:25px;
-                    line-height:1.3;
-                    color:#172033;
-                ">
-                    Reset your password
-                </h1>
-                """);
+                            </div>
 
+                            <p style="
+                                margin:0;
+                                color:#94a3b8;
+                                font-size:13px;
+                                line-height:1.6;
+                            ">
+                                This OTP expires in 5 minutes.
+                                If you did not request a password reset,
+                                please ignore this email.
+                            </p>
 
-        html.append("""
-                <p style="
-                    margin:0;
-                    color:#667085;
-                    line-height:1.7;
-                    font-size:15px;
-                ">
-                    We received a request to reset your
-                    Zyphora account password.
-                </p>
-                """);
+                        </div>
 
-
-        // --------------------------------------------------------
-        // OTP
-        // --------------------------------------------------------
-
-        html.append("""
-                <div style="
-                    margin:28px 0;
-                    padding:24px 15px;
-                    background:#f8fafc;
-                    border-radius:14px;
-                    text-align:center;
-                    box-sizing:border-box;
-                ">
-                """);
-
-
-        html.append("""
-                <div style="
-                    color:#64748b;
-                    font-size:11px;
-                    text-transform:uppercase;
-                    letter-spacing:2px;
-                    margin-bottom:12px;
-                ">
-                    Password Reset Code
-                </div>
-                """);
-
-
-        html.append("""
-                <div style="
-                    color:#4f46e5;
-                    font-size:34px;
-                    font-weight:800;
-                    letter-spacing:7px;
-                    word-break:break-all;
-                ">
-                """);
-
-        html.append(safeOtp);
-
-        html.append("""
-                </div>
-                </div>
-                """);
-
-
-        html.append("""
-                <p style="
-                    margin:0;
-                    color:#94a3b8;
-                    font-size:13px;
-                    line-height:1.6;
-                ">
-                    If you did not request a password reset,
-                    please ignore this email.
-                </p>
-                """);
-
-
-        html.append("""
-                </div>
-                </div>
+                    </div>
 
                 </body>
                 </html>
-                """);
-
-
-        return html.toString();
+                """.formatted(
+                safeAppName,
+                safeOtp
+        );
     }
-
 
     // ============================================================
     // ORDER CONFIRMATION EMAIL
@@ -758,8 +558,7 @@ public class EmailService {
             String username,
             Order order) {
 
-        String safeUsername =
-                escapeHtml(username);
+        String safeUsername = escapeHtml(username);
 
         String orderNumber =
                 order.getOrderId() != null
@@ -768,11 +567,6 @@ public class EmailService {
 
         String safeOrderNumber =
                 escapeHtml(orderNumber);
-
-
-        // --------------------------------------------------------
-        // Order date
-        // --------------------------------------------------------
 
         String orderDate = "N/A";
 
@@ -785,18 +579,11 @@ public class EmailService {
                     );
 
             orderDate =
-                    order.getOrderDate()
-                            .format(formatter);
+                    order.getOrderDate().format(formatter);
         }
-
 
         String safeOrderDate =
                 escapeHtml(orderDate);
-
-
-        // --------------------------------------------------------
-        // Order status
-        // --------------------------------------------------------
 
         String status =
                 order.getStatus() != null
@@ -806,24 +593,13 @@ public class EmailService {
         String safeStatus =
                 escapeHtml(status);
 
-
-        // --------------------------------------------------------
-        // Total
-        // --------------------------------------------------------
-
-        Double total =
+        double total =
                 order.getTotalAmount() != null
                         ? order.getTotalAmount()
                         : 0.0;
 
-
-        // --------------------------------------------------------
-        // Build order items
-        // --------------------------------------------------------
-
         StringBuilder itemsHtml =
                 new StringBuilder();
-
 
         if (order.getItems() != null
                 && !order.getItems().isEmpty()) {
@@ -835,76 +611,51 @@ public class EmailService {
                                 ? item.getProductName()
                                 : "Product";
 
-                Integer quantity =
+                int quantity =
                         item.getQuantity() != null
                                 ? item.getQuantity()
                                 : 0;
 
-                Double subtotal =
+                double subtotal =
                         item.getSubtotal() != null
                                 ? item.getSubtotal()
                                 : 0.0;
 
+                itemsHtml
+                        .append("<tr>")
+                        .append("<td style=\"")
+                        .append("padding:14px 8px;")
+                        .append("border-bottom:1px solid #eef2f7;")
+                        .append("color:#172033;")
+                        .append("word-break:break-word;")
+                        .append("\">")
+                        .append(escapeHtml(productName))
+                        .append("</td>")
 
-                itemsHtml.append("""
-                        <tr>
-                            <td style="
-                                padding:14px 8px;
-                                border-bottom:1px solid #eef2f7;
-                                color:#172033;
-                                word-break:break-word;
-                            ">
-                        """);
+                        .append("<td style=\"")
+                        .append("padding:14px 8px;")
+                        .append("text-align:center;")
+                        .append("border-bottom:1px solid #eef2f7;")
+                        .append("color:#667085;")
+                        .append("\">")
+                        .append(quantity)
+                        .append("</td>")
 
-
-                itemsHtml.append(
-                        escapeHtml(productName)
-                );
-
-
-                itemsHtml.append("""
-                            </td>
-
-                            <td style="
-                                padding:14px 8px;
-                                text-align:center;
-                                border-bottom:1px solid #eef2f7;
-                                color:#667085;
-                                white-space:nowrap;
-                            ">
-                        """);
-
-
-                itemsHtml.append(quantity);
-
-
-                itemsHtml.append("""
-                            </td>
-
-                            <td style="
-                                padding:14px 8px;
-                                text-align:right;
-                                border-bottom:1px solid #eef2f7;
-                                font-weight:600;
-                                white-space:nowrap;
-                            ">
-                            ₹
-                        """);
-
-
-                itemsHtml.append(
-                        String.format(
-                                Locale.ENGLISH,
-                                "%.2f",
-                                subtotal
+                        .append("<td style=\"")
+                        .append("padding:14px 8px;")
+                        .append("text-align:right;")
+                        .append("border-bottom:1px solid #eef2f7;")
+                        .append("font-weight:600;")
+                        .append("\">₹")
+                        .append(
+                                String.format(
+                                        Locale.ENGLISH,
+                                        "%.2f",
+                                        subtotal
+                                )
                         )
-                );
-
-
-                itemsHtml.append("""
-                            </td>
-                        </tr>
-                        """);
+                        .append("</td>")
+                        .append("</tr>");
             }
 
         } else {
@@ -923,24 +674,16 @@ public class EmailService {
                     """);
         }
 
+        String safeAppName =
+                escapeHtml(appName);
 
-        // ========================================================
-        // BUILD COMPLETE EMAIL
-        // ========================================================
-
-        StringBuilder html =
-                new StringBuilder();
-
-
-        html.append("""
+        return """
                 <!DOCTYPE html>
                 <html>
                 <head>
                     <meta charset="UTF-8">
-
                     <meta name="viewport"
                           content="width=device-width, initial-scale=1.0">
-
                     <title>Order Confirmation</title>
                 </head>
 
@@ -951,447 +694,296 @@ public class EmailService {
                     font-family:Arial,Helvetica,sans-serif;
                     color:#172033;
                 ">
-                """);
 
-
-        html.append("""
-                <div style="
-                    width:100%;
-                    padding:30px 15px;
-                    box-sizing:border-box;
-                ">
-                """);
-
-
-        html.append("""
-                <div style="
-                    max-width:650px;
-                    margin:0 auto;
-                    background:#ffffff;
-                    border:1px solid #e5e7eb;
-                    border-radius:18px;
-                    overflow:hidden;
-                ">
-                """);
-
-
-        // ========================================================
-        // HEADER
-        // ========================================================
-
-        html.append("""
-                <div style="
-                    background:linear-gradient(
-                        135deg,
-                        #dbeafe,
-                        #fce7f3
-                    );
-                    padding:32px 20px;
-                ">
-                """);
-
-
-        html.append("""
-                <div style="
-                    width:52px;
-                    height:52px;
-                    line-height:52px;
-                    text-align:center;
-                    background:#ffffff;
-                    border-radius:15px;
-                    color:#4f46e5;
-                    font-size:26px;
-                    font-weight:800;
-                ">
-                    Z
-                </div>
-                """);
-
-
-        html.append("""
-                <h1 style="
-                    margin:18px 0 8px;
-                    font-size:26px;
-                    line-height:1.3;
-                    color:#172033;
-                ">
-                    Order Confirmed
-                </h1>
-                """);
-
-
-        html.append("""
-                <p style="
-                    margin:0;
-                    color:#475569;
-                    font-size:14px;
-                    line-height:1.5;
-                ">
-                    Thank you for shopping with Zyphora.
-                </p>
-                </div>
-                """);
-
-
-        // ========================================================
-        // CONTENT
-        // ========================================================
-
-        html.append("""
-                <div style="
-                    padding:32px 25px;
-                    box-sizing:border-box;
-                ">
-                """);
-
-
-        html.append("""
-                <p style="
-                    margin:0 0 15px;
-                    font-size:15px;
-                    line-height:1.7;
-                    color:#172033;
-                ">
-                    Hi 
-                """);
-
-        html.append(safeUsername);
-
-        html.append("""
-                ,
-                </p>
-                """);
-
-
-        html.append("""
-                <p style="
-                    margin:0;
-                    color:#667085;
-                    line-height:1.7;
-                    font-size:15px;
-                ">
-                    Your order has been successfully placed.
-                    Here are your order details.
-                </p>
-                """);
-
-
-        // ========================================================
-        // ORDER INFORMATION
-        // ========================================================
-
-        html.append("""
-                <div style="
-                    margin:24px 0;
-                    padding:20px;
-                    background:#f8fafc;
-                    border-radius:14px;
-                    box-sizing:border-box;
-                    overflow:hidden;
-                ">
-                """);
-
-
-        html.append("""
-                <table
-                    width="100%"
-                    cellpadding="0"
-                    cellspacing="0"
-                    border="0"
-                    style="
+                    <div style="
                         width:100%;
-                        border-collapse:collapse;
+                        padding:30px 15px;
+                        box-sizing:border-box;
                     ">
-                """);
 
-
-        // Order ID
-
-        html.append("""
-                    <tr>
-                        <td style="
-                            padding:7px 0;
-                            color:#64748b;
-                            font-size:14px;
+                        <div style="
+                            max-width:650px;
+                            margin:0 auto;
+                            background:#ffffff;
+                            border:1px solid #e5e7eb;
+                            border-radius:18px;
+                            overflow:hidden;
                         ">
-                            Order ID
-                        </td>
 
-                        <td style="
-                            padding:7px 0;
-                            text-align:right;
-                            font-weight:700;
-                            font-size:14px;
-                            word-break:break-all;
-                        ">
-                """);
-
-        html.append(safeOrderNumber);
-
-        html.append("""
-                        </td>
-                    </tr>
-                """);
-
-
-        // Date
-
-        html.append("""
-                    <tr>
-                        <td style="
-                            padding:7px 0;
-                            color:#64748b;
-                            font-size:14px;
-                        ">
-                            Date
-                        </td>
-
-                        <td style="
-                            padding:7px 0;
-                            text-align:right;
-                            font-size:14px;
-                        ">
-                """);
-
-        html.append(safeOrderDate);
-
-        html.append("""
-                        </td>
-                    </tr>
-                """);
-
-
-        // Status
-
-        html.append("""
-                    <tr>
-                        <td style="
-                            padding:7px 0;
-                            color:#64748b;
-                            font-size:14px;
-                        ">
-                            Status
-                        </td>
-
-                        <td style="
-                            padding:7px 0;
-                            text-align:right;
-                            font-weight:700;
-                            color:#4f46e5;
-                            font-size:14px;
-                        ">
-                """);
-
-        html.append(safeStatus);
-
-        html.append("""
-                        </td>
-                    </tr>
-                </table>
-                </div>
-                """);
-
-
-        // ========================================================
-        // ORDER SUMMARY TITLE
-        // ========================================================
-
-        html.append("""
-                <h3 style="
-                    margin:28px 0 14px;
-                    font-size:17px;
-                    color:#172033;
-                ">
-                    Order Summary
-                </h3>
-                """);
-
-
-        // ========================================================
-        // ITEMS TABLE
-        // ========================================================
-
-        html.append("""
-                <div style="
-                    width:100%;
-                    overflow-x:auto;
-                    box-sizing:border-box;
-                ">
-                """);
-
-
-        html.append("""
-                <table
-                    width="100%"
-                    cellpadding="0"
-                    cellspacing="0"
-                    border="0"
-                    style="
-                        width:100%;
-                        min-width:400px;
-                        border-collapse:collapse;
-                        font-size:14px;
-                    ">
-                """);
-
-
-        html.append("""
-                    <thead>
-                        <tr>
-
-                            <th style="
-                                padding:10px 8px;
-                                text-align:left;
-                                color:#64748b;
-                                border-bottom:1px solid #e2e8f0;
-                                font-weight:600;
-                            ">
-                                Product
-                            </th>
-
-                            <th style="
-                                padding:10px 8px;
+                            <div style="
+                                background:linear-gradient(
+                                    135deg,
+                                    #dbeafe,
+                                    #fce7f3
+                                );
+                                padding:32px 20px;
                                 text-align:center;
-                                color:#64748b;
-                                border-bottom:1px solid #e2e8f0;
-                                font-weight:600;
                             ">
-                                Qty
-                            </th>
 
-                            <th style="
-                                padding:10px 8px;
-                                text-align:right;
-                                color:#64748b;
-                                border-bottom:1px solid #e2e8f0;
-                                font-weight:600;
+                                <div style="
+                                    width:52px;
+                                    height:52px;
+                                    line-height:52px;
+                                    text-align:center;
+                                    margin:0 auto;
+                                    background:#ffffff;
+                                    border-radius:15px;
+                                    color:#4f46e5;
+                                    font-size:26px;
+                                    font-weight:800;
+                                ">
+                                    Z
+                                </div>
+
+                                <h1 style="
+                                    margin:18px 0 8px;
+                                    font-size:26px;
+                                    line-height:1.3;
+                                    color:#172033;
+                                ">
+                                    Order Confirmed
+                                </h1>
+
+                                <p style="
+                                    margin:0;
+                                    color:#475569;
+                                    font-size:14px;
+                                ">
+                                    Thank you for shopping with %s.
+                                </p>
+
+                            </div>
+
+                            <div style="
+                                padding:32px 25px;
+                                box-sizing:border-box;
                             ">
-                                Amount
-                            </th>
 
-                        </tr>
-                    </thead>
+                                <p style="
+                                    margin:0 0 15px;
+                                    font-size:15px;
+                                    line-height:1.7;
+                                    color:#172033;
+                                ">
+                                    Hi %s,
+                                </p>
 
-                    <tbody>
-                """);
+                                <p style="
+                                    margin:0;
+                                    color:#667085;
+                                    line-height:1.7;
+                                    font-size:15px;
+                                ">
+                                    Your order has been successfully placed.
+                                    Here are your order details.
+                                </p>
 
+                                <div style="
+                                    margin:24px 0;
+                                    padding:20px;
+                                    background:#f8fafc;
+                                    border-radius:14px;
+                                    overflow:hidden;
+                                ">
 
-        html.append(itemsHtml);
+                                    <table
+                                        width="100%"
+                                        cellpadding="0"
+                                        cellspacing="0"
+                                        border="0"
+                                        style="
+                                            width:100%;
+                                            border-collapse:collapse;
+                                        ">
 
+                                        <tr>
+                                            <td style="
+                                                padding:7px 0;
+                                                color:#64748b;
+                                                font-size:14px;
+                                            ">
+                                                Order ID
+                                            </td>
 
-        html.append("""
-                    </tbody>
-                </table>
-                </div>
-                """);
+                                            <td style="
+                                                padding:7px 0;
+                                                text-align:right;
+                                                font-weight:700;
+                                                font-size:14px;
+                                                word-break:break-all;
+                                            ">
+                                                %s
+                                            </td>
+                                        </tr>
 
+                                        <tr>
+                                            <td style="
+                                                padding:7px 0;
+                                                color:#64748b;
+                                                font-size:14px;
+                                            ">
+                                                Date
+                                            </td>
 
-        // ========================================================
-        // TOTAL
-        // ========================================================
+                                            <td style="
+                                                padding:7px 0;
+                                                text-align:right;
+                                                font-size:14px;
+                                            ">
+                                                %s
+                                            </td>
+                                        </tr>
 
-        html.append("""
-                <div style="
-                    margin-top:20px;
-                    padding-top:18px;
-                    border-top:2px solid #e2e8f0;
-                    text-align:right;
-                ">
-                """);
+                                        <tr>
+                                            <td style="
+                                                padding:7px 0;
+                                                color:#64748b;
+                                                font-size:14px;
+                                            ">
+                                                Status
+                                            </td>
 
+                                            <td style="
+                                                padding:7px 0;
+                                                text-align:right;
+                                                font-weight:700;
+                                                color:#4f46e5;
+                                                font-size:14px;
+                                            ">
+                                                %s
+                                            </td>
+                                        </tr>
 
-        html.append("""
-                <span style="
-                    color:#64748b;
-                    margin-right:8px;
-                    font-size:14px;
-                ">
-                    Total
-                </span>
-                """);
+                                    </table>
 
+                                </div>
 
-        html.append("""
-                <strong style="
-                    font-size:23px;
-                    color:#4f46e5;
-                    white-space:nowrap;
-                ">
-                    ₹
-                """);
+                                <h3 style="
+                                    margin:28px 0 14px;
+                                    font-size:17px;
+                                    color:#172033;
+                                ">
+                                    Order Summary
+                                </h3>
 
+                                <div style="
+                                    width:100%;
+                                    overflow-x:auto;
+                                ">
 
-        html.append(
-                String.format(
-                        Locale.ENGLISH,
-                        "%.2f",
-                        total
-                )
-        );
+                                    <table
+                                        width="100%"
+                                        cellpadding="0"
+                                        cellspacing="0"
+                                        border="0"
+                                        style="
+                                            width:100%;
+                                            min-width:400px;
+                                            border-collapse:collapse;
+                                            font-size:14px;
+                                        ">
 
+                                        <thead>
+                                            <tr>
 
-        html.append("""
-                </strong>
-                </div>
-                """);
+                                                <th style="
+                                                    padding:10px 8px;
+                                                    text-align:left;
+                                                    color:#64748b;
+                                                    border-bottom:1px solid #e2e8f0;
+                                                ">
+                                                    Product
+                                                </th>
 
+                                                <th style="
+                                                    padding:10px 8px;
+                                                    text-align:center;
+                                                    color:#64748b;
+                                                    border-bottom:1px solid #e2e8f0;
+                                                ">
+                                                    Qty
+                                                </th>
 
-        html.append("""
-                </div>
-                """);
+                                                <th style="
+                                                    padding:10px 8px;
+                                                    text-align:right;
+                                                    color:#64748b;
+                                                    border-bottom:1px solid #e2e8f0;
+                                                ">
+                                                    Amount
+                                                </th>
 
+                                            </tr>
+                                        </thead>
 
-        // ========================================================
-        // FOOTER
-        // ========================================================
+                                        <tbody>
+                                            %s
+                                        </tbody>
 
-        html.append("""
-                <div style="
-                    padding:20px;
-                    border-top:1px solid #eef2f7;
-                    text-align:center;
-                    color:#94a3b8;
-                    font-size:12px;
-                    line-height:1.6;
-                ">
-                © 
-                """);
+                                    </table>
 
+                                </div>
 
-        html.append(
-                escapeHtml(appName)
-        );
+                                <div style="
+                                    margin-top:20px;
+                                    padding-top:18px;
+                                    border-top:2px solid #e2e8f0;
+                                    text-align:right;
+                                ">
 
+                                    <span style="
+                                        color:#64748b;
+                                        margin-right:8px;
+                                        font-size:14px;
+                                    ">
+                                        Total
+                                    </span>
 
-        html.append("""
-                · Thank you for choosing Zyphora.
-                </div>
-                """);
+                                    <strong style="
+                                        font-size:23px;
+                                        color:#4f46e5;
+                                    ">
+                                        ₹%.2f
+                                    </strong>
 
+                                </div>
 
-        // ========================================================
-        // CLOSE HTML
-        // ========================================================
+                            </div>
 
-        html.append("""
-                </div>
-                </div>
+                            <div style="
+                                padding:20px;
+                                border-top:1px solid #eef2f7;
+                                text-align:center;
+                                color:#94a3b8;
+                                font-size:12px;
+                            ">
+                                © %s · Thank you for choosing %s.
+                            </div>
+
+                        </div>
+
+                    </div>
 
                 </body>
                 </html>
-                """);
-
-
-        return html.toString();
+                """.formatted(
+                safeAppName,
+                safeUsername,
+                safeOrderNumber,
+                safeOrderDate,
+                safeStatus,
+                itemsHtml.toString(),
+                total,
+                safeAppName,
+                safeAppName
+        );
     }
-
 
     // ============================================================
     // HTML ESCAPING
     // ============================================================
 
-    private String escapeHtml(
-            String value) {
+    private String escapeHtml(String value) {
 
         if (value == null) {
             return "";
@@ -1405,13 +997,11 @@ public class EmailService {
                 .replace("'", "&#39;");
     }
 
-
     // ============================================================
     // JSON ESCAPING
     // ============================================================
 
-    private String escapeJson(
-            String value) {
+    private String escapeJson(String value) {
 
         if (value == null) {
             return "";
