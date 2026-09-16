@@ -55,6 +55,10 @@ export interface WishlistItem {
   addedAt?: string;
 }
 
+/* =========================
+   ORDER TYPES
+   ========================= */
+
 export type OrderStatus =
   | 'PENDING'
   | 'CONFIRMED'
@@ -62,6 +66,11 @@ export type OrderStatus =
   | 'SHIPPED'
   | 'DELIVERED'
   | 'CANCELLED';
+
+export type PaymentMethod =
+  | 'COD'
+  | 'UPI'
+  | 'CARD';
 
 export interface OrderItem {
   id?: number | string;
@@ -76,45 +85,70 @@ export interface OrderItem {
 export interface Order {
   id: number | string;
   orderNumber?: string;
+  orderId?: string;
   userId?: number;
+
   totalAmount: number;
+
   status: OrderStatus;
+
   orderDate?: string;
   createdAt?: string;
   updatedAt?: string;
+
   items: OrderItem[];
+
   shippingAddress?: string;
-  paymentMethod?: string;
+
+  paymentMethod?: PaymentMethod;
 }
+
+/* =========================
+   ORDER STATISTICS
+   ========================= */
 
 export interface OrderStats {
   totalOrders: number;
   totalRevenue: number;
+
   pendingOrders: number;
   confirmedOrders: number;
   processingOrders: number;
   shippedOrders: number;
   deliveredOrders: number;
   cancelledOrders: number;
+
   recentOrders?: Order[];
 }
+
+/* =========================
+   CUSTOMER
+   ========================= */
 
 export interface Customer {
   id: number;
   email: string;
   username: string;
   role: string;
+
   phoneNumber?: string;
   address?: string;
   city?: string;
   state?: string;
   country?: string;
   zipCode?: string;
+
   profileImage?: string;
+
   createdAt?: string;
   updatedAt?: string;
+
   orderCount?: number;
 }
+
+/* =========================
+   API RESPONSE
+   ========================= */
 
 export interface ApiResponse<T = any> {
   success: boolean;
