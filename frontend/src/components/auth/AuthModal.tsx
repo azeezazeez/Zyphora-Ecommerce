@@ -372,42 +372,60 @@ export function AuthModal() {
 
         {/* --- 3. OTP VERIFICATION VIEW --- */}
         {activeView === 'verify-otp' && (
-          <form onSubmit={handleVerifyOtpSubmit} className="space-y-4 text-xs">
-            <div className="bg-indigo-50/50 p-3 rounded-xl border border-indigo-100 flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
-              <span className="text-indigo-900">
-                A 6-digit confirmation code was sent to <strong>{email}</strong>.
-              </span>
+          <form onSubmit={handleVerifyOtpSubmit} className="space-y-5 text-xs">
+            <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-rose-50 p-5 text-center">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-white text-indigo-600 shadow-sm ring-1 ring-indigo-100">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <p className="font-bold text-[#17202A]">Check your inbox</p>
+              <p className="mt-1 leading-relaxed text-[#667085]">
+                We sent a 6-digit verification code to
+              </p>
+              <p className="mt-1 truncate font-semibold text-indigo-700" title={email}>
+                {email}
+              </p>
             </div>
 
             <div>
-              <label className="block font-semibold text-[#17202A] mb-1">Enter OTP Code</label>
+              <label className="mb-2 block text-center font-semibold text-[#17202A]">
+                Enter verification code
+              </label>
               <input
                 type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
                 required
                 maxLength={6}
                 value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                placeholder="123456"
-                className="w-full text-center tracking-[0.5em] text-lg font-mono py-2 bg-[#F8F9FA] border border-[#E1E5E9] rounded-lg focus:outline-none focus:border-indigo-600"
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="••••••"
+                aria-label="6-digit email verification code"
+                className="w-full rounded-xl border border-[#E1E5E9] bg-[#F8F9FA] px-4 py-4 text-center font-mono text-2xl font-bold tracking-[0.55em] text-[#17202A] outline-none transition focus:border-indigo-600 focus:bg-white focus:ring-4 focus:ring-indigo-100"
               />
+              <p className="mt-2 text-center text-[11px] text-[#8A9199]">
+                The code expires in 5 minutes.
+              </p>
             </div>
 
             <button
               type="submit"
-              disabled={submitting}
-              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors shadow-xs disabled:opacity-50"
+              disabled={submitting || otp.length !== 6}
+              className="w-full rounded-xl bg-indigo-600 py-3 font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {submitting ? 'Verifying...' : 'Verify & Continue'}
+              {submitting ? 'Verifying code…' : 'Verify Email & Continue'}
             </button>
 
-            <div className="text-center">
+            <div className="flex items-center justify-center gap-1 text-xs">
+              <span className="text-[#8A9199]">Entered the wrong email?</span>
               <button
                 type="button"
-                onClick={() => setActiveView('login')}
-                className="text-xs text-[#5F6368] hover:text-[#17202A]"
+                onClick={() => {
+                  resetFields();
+                  setActiveView('register');
+                }}
+                className="font-bold text-indigo-600 hover:underline"
               >
-                Back to Sign In
+                Go back
               </button>
             </div>
           </form>
