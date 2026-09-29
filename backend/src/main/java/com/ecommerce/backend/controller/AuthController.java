@@ -774,7 +774,7 @@ public class AuthController {
                 || googleClientId.isBlank()) {
 
             response.sendRedirect(
-                    "http://localhost:3000/login?googleError="
+                    "https://zyphora-cart.vercel.app/login?googleError="
                             + URLEncoder.encode(
                             "Google client ID is not configured",
                             StandardCharsets.UTF_8
