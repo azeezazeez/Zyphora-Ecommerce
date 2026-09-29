@@ -105,7 +105,7 @@ export function AuthModal() {
     }, 8000);
 
     try {
-      window.location.href = 'http://localhost:8080/api/auth/google';
+      window.location.href = 'https://zyphora-ecommerce.onrender.com/api/auth/google';
     } catch {
       clearTimeout(timer);
       setGoogleSubmitting(false);
