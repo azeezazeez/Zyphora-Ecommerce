@@ -11,7 +11,7 @@ import {
 
 export const API_BASE_URL =
   ((import.meta as any).env?.VITE_API_BASE_URL as string) ||
-  'http://localhost:8080/api';
+  'https://zyphora-ecommerce.onrender.com/api';
 
 export const AUTH_STORAGE_KEY = 'zyphora_currentUser';
 
