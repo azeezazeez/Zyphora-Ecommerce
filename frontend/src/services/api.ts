@@ -1,0 +1,1006 @@
+import {
+  ApiResponse,
+  CartResponse,
+  Customer,
+  Order,
+  OrderStats,
+  Product,
+  User,
+  WishlistItem,
+} from '../types';
+
+export const API_BASE_URL =
+  ((import.meta as any).env?.VITE_API_BASE_URL as string) ||
+  'http://localhost:8080/api';
+
+export const AUTH_STORAGE_KEY = 'zyphora_currentUser';
+
+export class ApiError extends Error {
+  status: number;
+  data: any;
+
+  constructor(
+    message: string,
+    status: number,
+    data?: any
+  ) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.data = data;
+  }
+}
+
+// =============================================================
+// AUTH STORAGE
+// =============================================================
+
+export function getStoredUser(): User | null {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+
+    if (!raw) {
+      return null;
+    }
+
+    const user: User = JSON.parse(raw);
+
+    // Check JWT expiration locally.
+    if (user.token) {
+      const parts = user.token.split('.');
+
+      if (parts.length === 3) {
+        try {
+          const payload = JSON.parse(atob(parts[1]));
+
+          if (
+            payload.exp &&
+            payload.exp * 1000 < Date.now()
+          ) {
+            localStorage.removeItem(
+              AUTH_STORAGE_KEY
+            );
+
+            return null;
+          }
+        } catch {
+          // Ignore JWT decoding errors.
+        }
+      }
+    }
+
+    return user;
+  } catch {
+    return null;
+  }
+}
+
+export function saveStoredUser(
+  user: User
+): void {
+  localStorage.setItem(
+    AUTH_STORAGE_KEY,
+    JSON.stringify(user)
+  );
+}
+
+export function clearStoredUser(): void {
+  localStorage.removeItem(
+    AUTH_STORAGE_KEY
+  );
+}
+
+// =============================================================
+// REQUEST HELPER
+// =============================================================
+
+interface RequestOptions extends RequestInit {
+  requiresAuth?: boolean;
+}
+
+async function request<T>(
+  endpoint: string,
+  options: RequestOptions = {}
+): Promise<T> {
+  const url = `${API_BASE_URL}${endpoint.startsWith('/')
+      ? endpoint
+      : `/${endpoint}`
+    }`;
+
+  const {
+    requiresAuth = false,
+    ...fetchOptions
+  } = options;
+
+  const headers = new Headers(
+    fetchOptions.headers
+  );
+
+  /*
+   * Only add Content-Type when there is actually
+   * a request body.
+   */
+  if (
+    fetchOptions.body &&
+    !headers.has('Content-Type')
+  ) {
+    headers.set(
+      'Content-Type',
+      'application/json'
+    );
+  }
+
+  headers.set(
+    'Accept',
+    'application/json'
+  );
+
+  /*
+   * Only attach JWT when authentication is required.
+   */
+  if (requiresAuth) {
+    const currentUser =
+      getStoredUser();
+
+    if (currentUser?.token) {
+      headers.set(
+        'Authorization',
+        `Bearer ${currentUser.token}`
+      );
+    }
+  }
+
+  let response: Response;
+
+  try {
+    response = await fetch(url, {
+      ...fetchOptions,
+      headers,
+    });
+  } catch (err: any) {
+    throw new ApiError(
+      'Unable to connect to Zyphora backend server. The service might be starting up, please try again.',
+      0,
+      err
+    );
+  }
+
+  /*
+   * Only remove authentication when the backend
+   * explicitly returns 401 Unauthorized.
+   */
+  if (response.status === 401) {
+    clearStoredUser();
+
+    window.dispatchEvent(
+      new CustomEvent(
+        'zyphora:unauthorized'
+      )
+    );
+
+    throw new ApiError(
+      'Session expired. Please sign in again.',
+      401
+    );
+  }
+
+  // Parse response.
+  let json: any = null;
+
+  const text = await response.text();
+
+  if (text) {
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = text;
+    }
+  }
+
+  if (!response.ok) {
+    const errorMsg =
+      (json &&
+        typeof json === 'object' &&
+        (json.message || json.error)) ||
+      `Request failed with status ${response.status}`;
+
+    throw new ApiError(
+      errorMsg,
+      response.status,
+      json
+    );
+  }
+
+  /*
+   * Unwrap:
+   *
+   * {
+   *   success: true,
+   *   data: ...
+   * }
+   */
+  if (
+    json &&
+    typeof json === 'object' &&
+    'data' in json &&
+    'success' in json
+  ) {
+    return json.data as T;
+  }
+
+  return json as T;
+}
+
+// =============================================================
+// API
+// =============================================================
+
+export const api = {
+  // -------------------------------------------------------------
+  // AUTHENTICATION
+  // -------------------------------------------------------------
+
+  async register(payload: {
+    email: string;
+    username: string;
+    password: string;
+    confirmPassword: string;
+  }): Promise<{ email: string }> {
+    return request(
+      '/auth/register',
+      {
+        method: 'POST',
+        body: JSON.stringify(
+          payload
+        ),
+        requiresAuth: false,
+      }
+    );
+  },
+
+  async verifyOtp(payload: {
+    email: string;
+    otp: string;
+  }): Promise<any> {
+    return request(
+      '/auth/register/verify-otp',
+      {
+        method: 'POST',
+        body: JSON.stringify(
+          payload
+        ),
+        requiresAuth: false,
+      }
+    );
+  },
+
+  async login(payload: {
+    email: string;
+    password: string;
+  }): Promise<User> {
+    const user =
+      await request<User>(
+        '/auth/login',
+        {
+          method: 'POST',
+          body: JSON.stringify(
+            payload
+          ),
+          requiresAuth: false,
+        }
+      );
+
+    if (user?.token) {
+      saveStoredUser(user);
+    }
+
+    return user;
+  },
+
+  async requestEmailOtp(
+    email: string
+  ): Promise<void> {
+    await request(
+      '/auth/email/request-otp',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          email,
+        }),
+        requiresAuth: false,
+      }
+    );
+  },
+
+  async verifyEmailOtp(
+    payload: {
+      email: string;
+      otp: string;
+    }
+  ): Promise<User> {
+    const user =
+      await request<User>(
+        '/auth/email/verify-otp',
+        {
+          method: 'POST',
+          body: JSON.stringify(
+            payload
+          ),
+          requiresAuth: false,
+        }
+      );
+
+    if (user?.token) {
+      saveStoredUser(user);
+    }
+
+    return user;
+  },
+
+  /*
+   * Google OAuth
+   *
+   * IMPORTANT:
+   * Google OAuth is now handled completely
+   * by the Spring Boot backend.
+   *
+   * Do NOT send a Google access token from
+   * React anymore.
+   *
+   * The frontend starts OAuth with:
+   *
+   * window.location.href =
+   *   'http://localhost:8080/api/auth/google';
+   *
+   * The backend handles:
+   *
+   * Google authorization
+   *        ↓
+   * callback
+   *        ↓
+   * Google profile
+   *        ↓
+   * Zyphora JWT
+   *        ↓
+   * /oauth-success?token=...
+   *
+   * Therefore there is intentionally NO
+   * loginWithGoogle() API method here.
+   */
+
+  // -------------------------------------------------------------
+  // FORGOT PASSWORD
+  // -------------------------------------------------------------
+
+  async forgotPasswordGenerateOtp(
+    email: string
+  ): Promise<any> {
+    return request(
+      '/auth/forgot-password/generate-otp',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          email,
+        }),
+        requiresAuth: false,
+      }
+    );
+  },
+
+  async forgotPasswordReset(
+    payload: {
+      email: string;
+      otp: string;
+      newPassword: string;
+      confirmPassword: string;
+    }
+  ): Promise<any> {
+    return request(
+      '/auth/forgot-password/reset',
+      {
+        method: 'POST',
+        body: JSON.stringify(
+          payload
+        ),
+        requiresAuth: false,
+      }
+    );
+  },
+
+  // -------------------------------------------------------------
+  // AI CHATBOT
+  // -------------------------------------------------------------
+
+  async chat(
+    message: string
+  ): Promise<{ reply: string }> {
+    return request<{
+      reply: string;
+    }>('/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        message,
+      }),
+      requiresAuth: false,
+    });
+  },
+
+  // -------------------------------------------------------------
+  // PROFILE
+  // -------------------------------------------------------------
+
+  async getProfile(): Promise<User> {
+    const profile =
+      await request<User>(
+        '/auth/profile',
+        {
+          requiresAuth: true,
+        }
+      );
+
+    const currentUser =
+      getStoredUser();
+
+    if (
+      currentUser?.token &&
+      profile
+    ) {
+      const mergedUser: User = {
+        ...currentUser,
+        ...profile,
+        token: currentUser.token,
+      };
+
+      saveStoredUser(mergedUser);
+
+      return mergedUser;
+    }
+
+    return profile;
+  },
+
+  async updateProfile(
+    data: Partial<User>
+  ): Promise<User> {
+    const currentUser =
+      getStoredUser();
+
+    if (!currentUser?.token) {
+      throw new ApiError(
+        'Your session has expired. Please sign in again.',
+        401
+      );
+    }
+
+    const updatedProfile =
+      await request<User>(
+        '/auth/profile',
+        {
+          method: 'PUT',
+          body: JSON.stringify(
+            data
+          ),
+          requiresAuth: true,
+        }
+      );
+
+    const updatedUser: User = {
+      ...currentUser,
+      ...updatedProfile,
+      token: currentUser.token,
+    };
+
+    saveStoredUser(
+      updatedUser
+    );
+
+    return updatedUser;
+  },
+
+  async changePassword(
+    payload: {
+      currentPassword: string;
+      newPassword: string;
+      confirmPassword: string;
+    }
+  ): Promise<any> {
+    return request(
+      '/auth/profile/change-password',
+      {
+        method: 'PUT',
+        body: JSON.stringify(
+          payload
+        ),
+        requiresAuth: true,
+      }
+    );
+  },
+
+  async deleteProfile(): Promise<any> {
+    const res =
+      await request(
+        '/auth/profile',
+        {
+          method: 'DELETE',
+          requiresAuth: true,
+        }
+      );
+
+    clearStoredUser();
+
+    return res;
+  },
+
+  // -------------------------------------------------------------
+  // PRODUCTS
+  // -------------------------------------------------------------
+
+  async getProducts(
+    params?: {
+      category?: string;
+      search?: string;
+    }
+  ): Promise<Product[]> {
+    const searchParams =
+      new URLSearchParams();
+
+    if (
+      params?.category &&
+      params.category !== 'All'
+    ) {
+      searchParams.append(
+        'category',
+        params.category
+      );
+    }
+
+    if (
+      params?.search &&
+      params.search.trim()
+    ) {
+      searchParams.append(
+        'search',
+        params.search.trim()
+      );
+    }
+
+    const query =
+      searchParams.toString();
+
+    const endpoint = query
+      ? `/products?${query}`
+      : '/products';
+
+    const products =
+      await request<Product[]>(
+        endpoint,
+        {
+          requiresAuth: false,
+        }
+      );
+
+    return Array.isArray(products)
+      ? products
+      : [];
+  },
+
+  async getProductById(
+    id: string | number
+  ): Promise<Product> {
+    return request<Product>(
+      `/products/${id}`,
+      {
+        requiresAuth: false,
+      }
+    );
+  },
+
+  // -------------------------------------------------------------
+  // CART
+  // -------------------------------------------------------------
+
+  async getCart(
+    userId: number
+  ): Promise<CartResponse> {
+    try {
+      const response =
+        await request<any>(
+          `/cart/${userId}`,
+          {
+            requiresAuth: true,
+          }
+        );
+
+      if (Array.isArray(response)) {
+        return {
+          userId,
+          items: response,
+
+          totalQuantity:
+            response.reduce(
+              (
+                sum: number,
+                item: any
+              ) =>
+                sum +
+                (item.quantity || 1),
+              0
+            ),
+
+          totalPrice:
+            response.reduce(
+              (
+                sum: number,
+                item: any
+              ) =>
+                sum +
+                (
+                  (
+                    item.price ||
+                    item.product?.price ||
+                    0
+                  ) *
+                  (item.quantity || 1)
+                ),
+              0
+            ),
+        };
+      }
+
+      return {
+        ...response,
+        items: Array.isArray(
+          response?.items
+        )
+          ? response.items
+          : [],
+      };
+    } catch (err: any) {
+      if (err.status === 404) {
+        return {
+          userId,
+          items: [],
+          totalPrice: 0,
+          totalQuantity: 0,
+        };
+      }
+
+      throw err;
+    }
+  },
+
+  async addToCart(
+    userId: number,
+    productId: string | number,
+    quantity = 1
+  ): Promise<any> {
+    return request(
+      '/cart/add',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          userId,
+          productId: String(
+            productId
+          ),
+          quantity,
+        }),
+        requiresAuth: true,
+      }
+    );
+  },
+
+  async updateCart(
+    userId: number,
+    productId: string | number,
+    quantity: number
+  ): Promise<any> {
+    return request(
+      '/cart/update',
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          userId,
+          productId: String(
+            productId
+          ),
+          quantity,
+        }),
+        requiresAuth: true,
+      }
+    );
+  },
+
+  async removeFromCart(
+    userId: number,
+    productId: string | number
+  ): Promise<any> {
+    return request(
+      `/cart/remove/${userId}/${productId}`,
+      {
+        method: 'DELETE',
+        requiresAuth: true,
+      }
+    );
+  },
+
+  async clearCart(
+    userId: number
+  ): Promise<any> {
+    return request(
+      `/cart/clear/${userId}`,
+      {
+        method: 'DELETE',
+        requiresAuth: true,
+      }
+    );
+  },
+
+  // -------------------------------------------------------------
+  // WISHLIST
+  // -------------------------------------------------------------
+
+  async getWishlist(
+    userId: number
+  ): Promise<WishlistItem[]> {
+    try {
+      const items =
+        await request<WishlistItem[]>(
+          `/wishlist/${userId}`,
+          {
+            requiresAuth: true,
+          }
+        );
+
+      return Array.isArray(items)
+        ? items
+        : [];
+    } catch (err: any) {
+      if (err.status === 404) {
+        return [];
+      }
+
+      throw err;
+    }
+  },
+
+  async addToWishlist(
+    userId: number,
+    productId: string | number
+  ): Promise<any> {
+    return request(
+      '/wishlist/add',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          userId,
+          productId: String(
+            productId
+          ),
+        }),
+        requiresAuth: true,
+      }
+    );
+  },
+
+  async removeFromWishlist(
+    userId: number,
+    productId: string | number
+  ): Promise<any> {
+    return request(
+      `/wishlist/remove/${userId}/${productId}`,
+      {
+        method: 'DELETE',
+        requiresAuth: true,
+      }
+    );
+  },
+
+  async checkInWishlist(
+    userId: number,
+    productId: string | number
+  ): Promise<boolean> {
+    try {
+      const res =
+        await request<
+          boolean | {
+            inWishlist: boolean;
+          }
+        >(
+          `/wishlist/${userId}/check/${productId}`,
+          {
+            requiresAuth: true,
+          }
+        );
+
+      if (typeof res === 'boolean') {
+        return res;
+      }
+
+      if (
+        res &&
+        typeof res === 'object' &&
+        'inWishlist' in res
+      ) {
+        return !!res.inWishlist;
+      }
+
+      return false;
+    } catch {
+      return false;
+    }
+  },
+
+  // -------------------------------------------------------------
+  // ORDERS
+  // -------------------------------------------------------------
+
+  async placeOrder(
+    userId: number,
+    payload: {
+      shippingAddress: string;
+      paymentMethod: string;
+    }
+  ): Promise<Order> {
+    return request<Order>(
+      `/orders/place/${userId}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(
+          payload
+        ),
+        requiresAuth: true,
+      }
+    );
+  },
+
+  async getUserOrders(
+    userId: number
+  ): Promise<Order[]> {
+    const orders =
+      await request<Order[]>(
+        `/orders/user/${userId}`,
+        {
+          requiresAuth: true,
+        }
+      );
+
+    return Array.isArray(orders)
+      ? orders
+      : [];
+  },
+
+  async getOrderById(
+    orderId: string | number
+  ): Promise<Order> {
+    return request<Order>(
+      `/orders/${orderId}`,
+      {
+        requiresAuth: true,
+      }
+    );
+  },
+
+  async getUserOrderSummary(
+    userId: number
+  ): Promise<any> {
+    return request(
+      `/orders/user/${userId}/summary`,
+      {
+        requiresAuth: true,
+      }
+    );
+  },
+
+  async cancelOrder(
+    orderId: string | number
+  ): Promise<any> {
+    return request(
+      `/orders/${orderId}/cancel`,
+      {
+        method: 'PUT',
+        requiresAuth: true,
+      }
+    );
+  },
+
+  // -------------------------------------------------------------
+  // ADMIN
+  // -------------------------------------------------------------
+
+  async getAdminOrders(): Promise<Order[]> {
+    const orders =
+      await request<Order[]>(
+        '/admin/orders',
+        {
+          requiresAuth: true,
+        }
+      );
+
+    return Array.isArray(orders)
+      ? orders
+      : [];
+  },
+
+  async getAdminOrderStats(): Promise<OrderStats> {
+    return request<OrderStats>(
+      '/admin/orders/stats',
+      {
+        requiresAuth: true,
+      }
+    );
+  },
+
+  async updateAdminOrderStatus(
+    orderId: string | number,
+    status: string
+  ): Promise<any> {
+    return request(
+      `/admin/orders/${orderId}/status`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          status,
+        }),
+        requiresAuth: true,
+      }
+    );
+  },
+
+  async getAdminCustomers(): Promise<Customer[]> {
+    const customers =
+      await request<Customer[]>(
+        '/admin/customers',
+        {
+          requiresAuth: true,
+        }
+      );
+
+    return Array.isArray(customers)
+      ? customers
+      : [];
+  },
+
+  async createAdminProduct(
+    productData: Partial<Product>
+  ): Promise<Product> {
+    return request<Product>(
+      '/admin/products',
+      {
+        method: 'POST',
+        body: JSON.stringify(
+          productData
+        ),
+        requiresAuth: true,
+      }
+    );
+  },
+
+  async updateAdminProduct(
+    id: string | number,
+    productData: Partial<Product>
+  ): Promise<Product> {
+    return request<Product>(
+      `/admin/products/${id}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(
+          productData
+        ),
+        requiresAuth: true,
+      }
+    );
+  },
+
+  async deleteAdminProduct(
+    id: string | number
+  ): Promise<any> {
+    return request(
+      `/admin/products/${id}`,
+      {
+        method: 'DELETE',
+        requiresAuth: true,
+      }
+    );
+  },
+};

@@ -1,0 +1,2138 @@
+package com.ecommerce.backend.service;
+
+import com.ecommerce.backend.entity.Order;
+import com.ecommerce.backend.entity.OrderItem;
+import com.ecommerce.backend.entity.OrderStatus;
+import com.ecommerce.backend.entity.User;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestTemplate;
+
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+@Service
+public class EmailService {
+
+    private static final String BREVO_API_URL =
+            "https://api.brevo.com/v3/smtp/email";
+
+    private final RestTemplate restTemplate;
+
+    @Value("${brevo.api.key:}")
+    private String brevoApiKey;
+
+    @Value("${user.mail:}")
+    private String senderEmail;
+
+    @Value("${app.name:Zyphora}")
+    private String appName;
+
+    public EmailService() {
+        this.restTemplate = new RestTemplate();
+    }
+
+    // ============================================================
+    // SIGNUP OTP
+    // ============================================================
+
+    public void sendSignupOtp(
+            String toEmail,
+            String otp,
+            String username) {
+
+        String recipientName =
+                username == null || username.isBlank()
+                        ? "Zyphora User"
+                        : username.trim();
+
+        String subject =
+                "Verify your " + getSafeAppName() + " account";
+
+        String html =
+                buildSignupOtpEmail(
+                        recipientName,
+                        otp
+                );
+
+        sendEmail(
+                toEmail,
+                recipientName,
+                subject,
+                html
+        );
+    }
+
+    // ============================================================
+    // PASSWORD RESET OTP
+    // ============================================================
+
+    public void sendOtp(
+            String toEmail,
+            String otp) {
+
+        String subject =
+                getSafeAppName() + " Password Reset OTP";
+
+        String html =
+                buildPasswordResetEmail(otp);
+
+        sendEmail(
+                toEmail,
+                "Zyphora User",
+                subject,
+                html
+        );
+    }
+
+    // ============================================================
+    // ORDER CONFIRMATION
+    // ============================================================
+
+    public void sendOrderConfirmation(
+            String toEmail,
+            String username,
+            Order order) {
+
+        if (order == null) {
+            throw new IllegalArgumentException(
+                    "Order cannot be null."
+            );
+        }
+
+        String recipientName =
+                username == null || username.isBlank()
+                        ? "Zyphora Customer"
+                        : username.trim();
+
+        String orderNumber =
+                order.getOrderId() != null
+                        ? order.getOrderId()
+                        : String.valueOf(order.getId());
+
+        String subject =
+                "Order Confirmed - " + orderNumber;
+
+        String html =
+                buildOrderConfirmationEmail(
+                        recipientName,
+                        order
+                );
+
+        sendEmail(
+                toEmail,
+                recipientName,
+                subject,
+                html
+        );
+    }
+
+
+    // ============================================================
+    // ORDER STATUS UPDATE EMAIL
+    // ============================================================
+
+    public void sendOrderStatusUpdateEmail(
+            Order order,
+            User user,
+            OrderStatus oldStatus,
+            OrderStatus newStatus) {
+
+        if (order == null) {
+            throw new IllegalArgumentException("Order cannot be null.");
+        }
+
+        if (user == null) {
+            throw new IllegalArgumentException("User cannot be null.");
+        }
+
+        if (newStatus == null) {
+            throw new IllegalArgumentException(
+                    "New order status cannot be null."
+            );
+        }
+
+        // Do not send an email if the status did not actually change.
+        if (oldStatus == newStatus) {
+            return;
+        }
+
+        String toEmail = user.getEmail();
+
+        if (toEmail == null || toEmail.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Customer email cannot be empty."
+            );
+        }
+
+        String username =
+                user.getUsername() == null || user.getUsername().isBlank()
+                        ? "Zyphora Customer"
+                        : user.getUsername().trim();
+
+        String orderNumber =
+                order.getOrderId() != null
+                        && !order.getOrderId().isBlank()
+                        ? order.getOrderId()
+                        : String.valueOf(order.getId());
+
+        String subject = switch (newStatus) {
+            case PENDING ->
+                    "Order Status Updated - " + orderNumber;
+            case CONFIRMED ->
+                    "Order Confirmed - " + orderNumber;
+            case PROCESSING ->
+                    "Order Processing - " + orderNumber;
+            case SHIPPED ->
+                    "Order Shipped - " + orderNumber;
+            case DELIVERED ->
+                    "Order Delivered - " + orderNumber;
+            case CANCELLED ->
+                    "Order Cancelled - " + orderNumber;
+        };
+
+        String html =
+                buildOrderStatusUpdateEmail(
+                        username,
+                        order,
+                        newStatus
+                );
+
+        sendEmail(
+                toEmail,
+                username,
+                subject,
+                html
+        );
+    }
+
+    // ============================================================
+    // COMMON EMAIL SENDER
+    // ============================================================
+
+    private void sendEmail(
+            String toEmail,
+            String recipientName,
+            String subject,
+            String htmlContent) {
+
+        String recipient =
+                normalizeEmail(toEmail);
+
+        String sender =
+                normalizeEmail(senderEmail);
+
+        if (recipient.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Recipient email cannot be empty."
+            );
+        }
+
+        if (!isValidEmail(recipient)) {
+            throw new IllegalArgumentException(
+                    "Invalid recipient email address."
+            );
+        }
+
+        if (brevoApiKey == null
+                || brevoApiKey.trim().isBlank()) {
+
+            throw new IllegalStateException(
+                    "BREVO_API_KEY is not configured in the backend environment."
+            );
+        }
+
+        if (sender.isBlank()) {
+            throw new IllegalStateException(
+                    "USER_MAIL is not configured in the backend environment."
+            );
+        }
+
+        if (!isValidEmail(sender)) {
+            throw new IllegalStateException(
+                    "USER_MAIL is not a valid email address."
+            );
+        }
+
+        if (subject == null || subject.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Email subject cannot be empty."
+            );
+        }
+
+        if (htmlContent == null || htmlContent.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Email HTML content cannot be empty."
+            );
+        }
+
+        String apiKey = brevoApiKey.trim();
+
+        System.out.println(
+                "Zyphora email configuration: "
+                        + "Brevo API key configured="
+                        + !apiKey.isBlank()
+                        + ", key length="
+                        + apiKey.length()
+                        + ", sender="
+                        + sender
+        );
+
+        // ========================================================
+        // BREVO REQUEST BODY
+        // ========================================================
+
+        Map<String, Object> senderObject =
+                new HashMap<>();
+
+        senderObject.put(
+                "name",
+                getSafeAppName()
+        );
+
+        senderObject.put(
+                "email",
+                sender
+        );
+
+        Map<String, Object> recipientObject =
+                new HashMap<>();
+
+        recipientObject.put(
+                "email",
+                recipient
+        );
+
+        recipientObject.put(
+                "name",
+                recipientName == null || recipientName.isBlank()
+                        ? "Zyphora Customer"
+                        : recipientName.trim()
+        );
+
+        Map<String, Object> requestBody =
+                new HashMap<>();
+
+        requestBody.put(
+                "sender",
+                senderObject
+        );
+
+        requestBody.put(
+                "to",
+                List.of(recipientObject)
+        );
+
+        requestBody.put(
+                "subject",
+                subject.trim()
+        );
+
+        requestBody.put(
+                "htmlContent",
+                htmlContent
+        );
+
+        HttpHeaders headers =
+                new HttpHeaders();
+
+        headers.setContentType(
+                MediaType.APPLICATION_JSON
+        );
+
+        headers.setAccept(
+                List.of(MediaType.APPLICATION_JSON)
+        );
+
+        headers.set(
+                "api-key",
+                apiKey
+        );
+
+        HttpEntity<Map<String, Object>> request =
+                new HttpEntity<>(
+                        requestBody,
+                        headers
+                );
+
+        // ========================================================
+        // CALL BREVO
+        // ========================================================
+
+        try {
+
+            System.out.println(
+                    "Zyphora: Sending email through Brevo..."
+            );
+
+            System.out.println(
+                    "Zyphora: Recipient="
+                            + recipient
+                            + ", Sender="
+                            + sender
+            );
+
+            ResponseEntity<String> response =
+                    restTemplate.postForEntity(
+                            BREVO_API_URL,
+                            request,
+                            String.class
+                    );
+
+            System.out.println(
+                    "================================================"
+            );
+
+            System.out.println(
+                    "ZYPHORA EMAIL SENT SUCCESSFULLY"
+            );
+
+            System.out.println(
+                    "Brevo HTTP Status: "
+                            + response.getStatusCode().value()
+            );
+
+            System.out.println(
+                    "Recipient: "
+                            + recipient
+            );
+
+            System.out.println(
+                    "================================================"
+            );
+
+        } catch (HttpStatusCodeException exception) {
+
+            int status =
+                    exception.getStatusCode().value();
+
+            String responseBody =
+                    exception.getResponseBodyAsString();
+
+            System.err.println(
+                    "================================================"
+            );
+
+            System.err.println(
+                    "BREVO API ERROR"
+            );
+
+            System.err.println(
+                    "HTTP Status: "
+                            + status
+            );
+
+            System.err.println(
+                    "Response: "
+                            + safeLog(responseBody)
+            );
+
+            System.err.println(
+                    "================================================"
+            );
+
+            throw new IllegalStateException(
+                    "Brevo email API returned HTTP "
+                            + status
+                            + ": "
+                            + safeLog(responseBody),
+                    exception
+            );
+
+        } catch (ResourceAccessException exception) {
+
+            System.err.println(
+                    "================================================"
+            );
+
+            System.err.println(
+                    "BREVO CONNECTION ERROR"
+            );
+
+            System.err.println(
+                    "Could not connect to Brevo."
+            );
+
+            System.err.println(
+                    "Reason: "
+                            + exception.getMessage()
+            );
+
+            System.err.println(
+                    "================================================"
+            );
+
+            throw new IllegalStateException(
+                    "Could not connect to Brevo email service.",
+                    exception
+            );
+
+        } catch (Exception exception) {
+
+            System.err.println(
+                    "================================================"
+            );
+
+            System.err.println(
+                    "BREVO EMAIL ERROR"
+            );
+
+            System.err.println(
+                    "Error type: "
+                            + exception.getClass().getName()
+            );
+
+            System.err.println(
+                    "Message: "
+                            + exception.getMessage()
+            );
+
+            System.err.println(
+                    "================================================"
+            );
+
+            throw new IllegalStateException(
+                    "Failed to send email through Brevo.",
+                    exception
+            );
+        }
+    }
+
+    // ============================================================
+    // SIGNUP OTP EMAIL
+    // ============================================================
+
+    private String buildSignupOtpEmail(
+            String username,
+            String otp) {
+
+        String safeUsername =
+                escapeHtml(username);
+
+        String safeOtp =
+                escapeHtml(otp);
+
+        String safeAppName =
+                escapeHtml(getSafeAppName());
+
+        return """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport"
+                          content="width=device-width, initial-scale=1.0">
+                    <title>Verify your account</title>
+                </head>
+
+                <body style="
+                    margin:0;
+                    padding:0;
+                    background:#f4f7fb;
+                    font-family:Arial,Helvetica,sans-serif;
+                    color:#172033;
+                ">
+
+                    <div style="
+                        width:100%;
+                        padding:30px 12px;
+                        box-sizing:border-box;
+                    ">
+
+                        <div style="
+                            max-width:600px;
+                            margin:0 auto;
+                            background:#ffffff;
+                            border:1px solid #e5e7eb;
+                            border-radius:18px;
+                            overflow:hidden;
+                        ">
+
+                            <div style="
+                                padding:32px 20px;
+                                text-align:center;
+                                background:linear-gradient(
+                                    135deg,
+                                    #eef2ff,
+                                    #fce7f3
+                                );
+                            ">
+
+                                <div style="
+                                    width:52px;
+                                    height:52px;
+                                    line-height:52px;
+                                    margin:0 auto;
+                                    background:#ffffff;
+                                    border-radius:15px;
+                                    color:#4f46e5;
+                                    font-size:26px;
+                                    font-weight:800;
+                                ">
+                                    Z
+                                </div>
+
+                                <h1 style="
+                                    margin:16px 0 0;
+                                    font-size:26px;
+                                    line-height:1.3;
+                                    color:#172033;
+                                ">
+                                    Welcome to {{APP_NAME}}
+                                </h1>
+
+                            </div>
+
+                            <div style="
+                                padding:32px 24px;
+                            ">
+
+                                <h2 style="
+                                    margin:0 0 16px;
+                                    font-size:21px;
+                                    color:#172033;
+                                ">
+                                    Verify your email
+                                </h2>
+
+                                <p style="
+                                    margin:0 0 15px;
+                                    color:#667085;
+                                    font-size:15px;
+                                    line-height:1.7;
+                                ">
+                                    Hi {{USERNAME}},
+                                </p>
+
+                                <p style="
+                                    margin:0;
+                                    color:#667085;
+                                    font-size:15px;
+                                    line-height:1.7;
+                                ">
+                                    Thank you for creating your
+                                    {{APP_NAME}} account.
+                                    Enter the verification code below
+                                    to complete your registration.
+                                </p>
+
+                                <div style="
+                                    margin:28px 0;
+                                    padding:24px 15px;
+                                    background:#f8fafc;
+                                    border:1px dashed #cbd5e1;
+                                    border-radius:14px;
+                                    text-align:center;
+                                ">
+
+                                    <div style="
+                                        color:#64748b;
+                                        font-size:11px;
+                                        text-transform:uppercase;
+                                        letter-spacing:2px;
+                                        margin-bottom:12px;
+                                    ">
+                                        Verification Code
+                                    </div>
+
+                                    <div style="
+                                        color:#4f46e5;
+                                        font-size:34px;
+                                        font-weight:800;
+                                        letter-spacing:7px;
+                                        word-break:break-all;
+                                    ">
+                                        {{OTP}}
+                                    </div>
+
+                                </div>
+
+                                <p style="
+                                    margin:0;
+                                    color:#94a3b8;
+                                    font-size:13px;
+                                    line-height:1.6;
+                                ">
+                                    This OTP expires in 5 minutes.
+                                    If you did not create this account,
+                                    you can safely ignore this email.
+                                </p>
+
+                            </div>
+
+                            <div style="
+                                padding:20px;
+                                text-align:center;
+                                border-top:1px solid #eef2f7;
+                                color:#94a3b8;
+                                font-size:12px;
+                            ">
+                                © {{APP_NAME}}. All rights reserved.
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </body>
+                </html>
+                """
+                .replace("{{APP_NAME}}", safeAppName)
+                .replace("{{USERNAME}}", safeUsername)
+                .replace("{{OTP}}", safeOtp);
+    }
+
+    // ============================================================
+    // PASSWORD RESET EMAIL
+    // ============================================================
+
+    private String buildPasswordResetEmail(
+            String otp) {
+
+        String safeOtp =
+                escapeHtml(otp);
+
+        String safeAppName =
+                escapeHtml(getSafeAppName());
+
+        return """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport"
+                          content="width=device-width, initial-scale=1.0">
+                    <title>Password Reset</title>
+                </head>
+
+                <body style="
+                    margin:0;
+                    padding:0;
+                    background:#f4f7fb;
+                    font-family:Arial,Helvetica,sans-serif;
+                    color:#172033;
+                ">
+
+                    <div style="
+                        width:100%;
+                        padding:30px 12px;
+                        box-sizing:border-box;
+                    ">
+
+                        <div style="
+                            max-width:600px;
+                            margin:0 auto;
+                            background:#ffffff;
+                            border:1px solid #e5e7eb;
+                            border-radius:18px;
+                            padding:30px 24px;
+                            box-sizing:border-box;
+                        ">
+
+                            <div style="
+                                width:52px;
+                                height:52px;
+                                line-height:52px;
+                                text-align:center;
+                                background:#eef2ff;
+                                border-radius:15px;
+                                color:#4f46e5;
+                                font-size:26px;
+                                font-weight:800;
+                            ">
+                                Z
+                            </div>
+
+                            <h1 style="
+                                margin:20px 0 10px;
+                                font-size:25px;
+                                line-height:1.3;
+                                color:#172033;
+                            ">
+                                Reset your password
+                            </h1>
+
+                            <p style="
+                                margin:0;
+                                color:#667085;
+                                line-height:1.7;
+                                font-size:15px;
+                            ">
+                                We received a request to reset your
+                                {{APP_NAME}} account password.
+                            </p>
+
+                            <div style="
+                                margin:28px 0;
+                                padding:24px 15px;
+                                background:#f8fafc;
+                                border-radius:14px;
+                                text-align:center;
+                            ">
+
+                                <div style="
+                                    color:#64748b;
+                                    font-size:11px;
+                                    text-transform:uppercase;
+                                    letter-spacing:2px;
+                                    margin-bottom:12px;
+                                ">
+                                    Password Reset Code
+                                </div>
+
+                                <div style="
+                                    color:#4f46e5;
+                                    font-size:34px;
+                                    font-weight:800;
+                                    letter-spacing:7px;
+                                    word-break:break-all;
+                                ">
+                                    {{OTP}}
+                                </div>
+
+                            </div>
+
+                            <p style="
+                                margin:0;
+                                color:#94a3b8;
+                                font-size:13px;
+                                line-height:1.6;
+                            ">
+                                This OTP expires in 5 minutes.
+                                If you did not request a password reset,
+                                please ignore this email.
+                            </p>
+
+                        </div>
+
+                    </div>
+
+                </body>
+                </html>
+                """
+                .replace("{{APP_NAME}}", safeAppName)
+                .replace("{{OTP}}", safeOtp);
+    }
+
+
+    // ============================================================
+    // ORDER STATUS UPDATE EMAIL TEMPLATE
+    // ============================================================
+
+    private String buildOrderStatusUpdateEmail(
+            String username,
+            Order order,
+            OrderStatus status) {
+
+        String safeUsername =
+                escapeHtml(username);
+
+        String orderNumber =
+                order.getOrderId() != null
+                        && !order.getOrderId().isBlank()
+                        ? order.getOrderId()
+                        : String.valueOf(order.getId());
+
+        String safeOrderNumber =
+                escapeHtml(orderNumber);
+
+        String safeAppName =
+                escapeHtml(getSafeAppName());
+
+        String orderDate = "N/A";
+
+        if (order.getOrderDate() != null) {
+
+            DateTimeFormatter formatter =
+                    DateTimeFormatter.ofPattern(
+                            "dd MMM yyyy, hh:mm a",
+                            Locale.ENGLISH
+                    );
+
+            orderDate =
+                    order.getOrderDate().format(formatter);
+        }
+
+        String safeOrderDate =
+                escapeHtml(orderDate);
+
+        String statusLabel = switch (status) {
+            case PENDING -> "Order Pending";
+            case CONFIRMED -> "Order Confirmed";
+            case PROCESSING -> "Order Processing";
+            case SHIPPED -> "Order Shipped";
+            case DELIVERED -> "Order Delivered";
+            case CANCELLED -> "Order Cancelled";
+        };
+
+        String statusMessage = switch (status) {
+            case PENDING ->
+                    "Your order is currently pending.";
+
+            case CONFIRMED ->
+                    "Your order has been confirmed and is now being prepared.";
+
+            case PROCESSING ->
+                    "Your order is currently being prepared for dispatch.";
+
+            case SHIPPED ->
+                    "Great news! Your order has been shipped and is on its way.";
+
+            case DELIVERED ->
+                    "Your order has been delivered successfully. Thank you for shopping with us.";
+
+            case CANCELLED ->
+                    "Your order has been cancelled successfully. If you did not request this cancellation, please contact Zyphora support.";
+        };
+
+        String paymentMethod =
+                order.getPaymentMethod() != null
+                        ? order.getPaymentMethod()
+                                .trim()
+                                .toUpperCase(Locale.ROOT)
+                        : "COD";
+
+        String paymentLabel = switch (paymentMethod) {
+            case "UPI" -> "UPI";
+            case "CARD" -> "Credit / Debit Card";
+            default -> "Cash on Delivery";
+        };
+
+        double total =
+                order.getTotalAmount() != null
+                        ? order.getTotalAmount()
+                        : 0.0;
+
+        String formattedTotal =
+                String.format(
+                        Locale.ENGLISH,
+                        "%.2f",
+                        total
+                );
+
+        StringBuilder itemsHtml =
+                new StringBuilder();
+
+        if (order.getItems() != null
+                && !order.getItems().isEmpty()) {
+
+            for (OrderItem item : order.getItems()) {
+
+                String productName =
+                        item.getProductName() != null
+                                ? item.getProductName()
+                                : "Product";
+
+                int quantity =
+                        item.getQuantity() != null
+                                ? item.getQuantity()
+                                : 0;
+
+                double subtotal =
+                        item.getSubtotal() != null
+                                ? item.getSubtotal()
+                                : (
+                                    item.getPrice() != null
+                                            ? item.getPrice() * quantity
+                                            : 0.0
+                                );
+
+                itemsHtml
+                        .append("""
+                                <tr>
+                                    <td style="
+                                        padding:14px 8px;
+                                        border-bottom:1px solid #edf1f7;
+                                        color:#172033;
+                                        font-size:14px;
+                                        line-height:1.5;
+                                        word-break:break-word;
+                                    ">
+                                """)
+                        .append(escapeHtml(productName))
+                        .append("""
+                                    </td>
+
+                                    <td style="
+                                        padding:14px 8px;
+                                        border-bottom:1px solid #edf1f7;
+                                        text-align:center;
+                                        color:#667085;
+                                        font-size:14px;
+                                    ">
+                                """)
+                        .append(quantity)
+                        .append("""
+                                    </td>
+
+                                    <td style="
+                                        padding:14px 8px;
+                                        border-bottom:1px solid #edf1f7;
+                                        text-align:right;
+                                        color:#172033;
+                                        font-size:14px;
+                                        font-weight:600;
+                                        white-space:nowrap;
+                                    ">
+                                        ₹
+                                """)
+                        .append(
+                                String.format(
+                                        Locale.ENGLISH,
+                                        "%.2f",
+                                        subtotal
+                                )
+                        )
+                        .append("""
+                                    </td>
+                                </tr>
+                                """);
+            }
+
+        } else {
+
+            itemsHtml.append("""
+                    <tr>
+                        <td colspan="3" style="
+                            padding:20px 10px;
+                            text-align:center;
+                            color:#94a3b8;
+                            font-size:13px;
+                        ">
+                            Order items unavailable
+                        </td>
+                    </tr>
+                    """);
+        }
+
+        return """
+                <!DOCTYPE html>
+                <html>
+
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport"
+                          content="width=device-width, initial-scale=1.0">
+                    <title>{{STATUS_LABEL}} - {{ORDER_ID}}</title>
+                </head>
+
+                <body style="
+                    margin:0;
+                    padding:0;
+                    background:#f3f6fa;
+                    font-family:Arial,Helvetica,sans-serif;
+                    color:#172033;
+                ">
+
+                    <div style="
+                        width:100%;
+                        padding:28px 12px;
+                        box-sizing:border-box;
+                    ">
+
+                        <div style="
+                            max-width:620px;
+                            margin:0 auto;
+                            background:#ffffff;
+                            border:1px solid #e5e9f0;
+                            border-radius:20px;
+                            overflow:hidden;
+                        ">
+
+                            <div style="
+                                padding:28px 24px;
+                                background:#111827;
+                            ">
+
+                                <div style="
+                                    color:#ffffff;
+                                    font-size:26px;
+                                    line-height:1;
+                                    font-weight:800;
+                                ">
+                                    {{APP_NAME}}
+                                </div>
+
+                                <div style="
+                                    margin-top:8px;
+                                    color:#9ca3af;
+                                    font-size:11px;
+                                    line-height:1.4;
+                                    letter-spacing:2px;
+                                    text-transform:uppercase;
+                                ">
+                                    Order Update
+                                </div>
+
+                            </div>
+
+                            <div style="
+                                padding:30px 24px;
+                            ">
+
+                                <div style="
+                                    width:54px;
+                                    height:54px;
+                                    line-height:54px;
+                                    text-align:center;
+                                    background:#eef2ff;
+                                    border-radius:16px;
+                                    color:#4f46e5;
+                                    font-size:27px;
+                                    font-weight:800;
+                                ">
+                                    ✓
+                                </div>
+
+                                <h1 style="
+                                    margin:20px 0 10px;
+                                    color:#111827;
+                                    font-size:25px;
+                                    line-height:1.3;
+                                ">
+                                    {{STATUS_LABEL}}
+                                </h1>
+
+                                <p style="
+                                    margin:0;
+                                    color:#667085;
+                                    font-size:15px;
+                                    line-height:1.7;
+                                ">
+                                    Hi {{USERNAME}},
+                                </p>
+
+                                <p style="
+                                    margin:12px 0 0;
+                                    color:#667085;
+                                    font-size:14px;
+                                    line-height:1.7;
+                                ">
+                                    {{STATUS_MESSAGE}}
+                                </p>
+
+                                <div style="
+                                    margin-top:24px;
+                                    padding:18px;
+                                    background:#f8fafc;
+                                    border:1px solid #edf1f7;
+                                    border-radius:14px;
+                                ">
+
+                                    <table
+                                        width="100%"
+                                        cellpadding="0"
+                                        cellspacing="0"
+                                        border="0">
+
+                                        <tr>
+                                            <td style="
+                                                padding:6px 0;
+                                                color:#64748b;
+                                                font-size:12px;
+                                                text-transform:uppercase;
+                                            ">
+                                                Order ID
+                                            </td>
+
+                                            <td style="
+                                                padding:6px 0;
+                                                text-align:right;
+                                                color:#111827;
+                                                font-size:13px;
+                                                font-weight:700;
+                                                word-break:break-all;
+                                            ">
+                                                {{ORDER_ID}}
+                                            </td>
+                                        </tr>
+
+                                        <tr>
+                                            <td style="
+                                                padding:6px 0;
+                                                color:#64748b;
+                                                font-size:12px;
+                                                text-transform:uppercase;
+                                            ">
+                                                Order Date
+                                            </td>
+
+                                            <td style="
+                                                padding:6px 0;
+                                                text-align:right;
+                                                color:#111827;
+                                                font-size:13px;
+                                            ">
+                                                {{ORDER_DATE}}
+                                            </td>
+                                        </tr>
+
+                                        <tr>
+                                            <td style="
+                                                padding:6px 0;
+                                                color:#64748b;
+                                                font-size:12px;
+                                                text-transform:uppercase;
+                                            ">
+                                                Status
+                                            </td>
+
+                                            <td style="
+                                                padding:6px 0;
+                                                text-align:right;
+                                                color:#4f46e5;
+                                                font-size:13px;
+                                                font-weight:700;
+                                            ">
+                                                {{STATUS}}
+                                            </td>
+                                        </tr>
+
+                                        <tr>
+                                            <td style="
+                                                padding:6px 0;
+                                                color:#64748b;
+                                                font-size:12px;
+                                                text-transform:uppercase;
+                                            ">
+                                                Payment
+                                            </td>
+
+                                            <td style="
+                                                padding:6px 0;
+                                                text-align:right;
+                                                color:#111827;
+                                                font-size:13px;
+                                                font-weight:600;
+                                            ">
+                                                {{PAYMENT_METHOD}}
+                                            </td>
+                                        </tr>
+
+                                    </table>
+
+                                </div>
+
+                                <h2 style="
+                                    margin:28px 0 14px;
+                                    color:#111827;
+                                    font-size:17px;
+                                ">
+                                    Order Summary
+                                </h2>
+
+                                <div style="
+                                    width:100%;
+                                    overflow:hidden;
+                                    border:1px solid #edf1f7;
+                                    border-radius:14px;
+                                ">
+
+                                    <table
+                                        width="100%"
+                                        cellpadding="0"
+                                        cellspacing="0"
+                                        border="0"
+                                        style="
+                                            width:100%;
+                                            border-collapse:collapse;
+                                        ">
+
+                                        <thead>
+                                            <tr>
+
+                                                <th style="
+                                                    padding:12px 8px;
+                                                    text-align:left;
+                                                    background:#f8fafc;
+                                                    color:#64748b;
+                                                    font-size:11px;
+                                                    text-transform:uppercase;
+                                                    border-bottom:1px solid #edf1f7;
+                                                ">
+                                                    Item
+                                                </th>
+
+                                                <th style="
+                                                    padding:12px 8px;
+                                                    text-align:center;
+                                                    background:#f8fafc;
+                                                    color:#64748b;
+                                                    font-size:11px;
+                                                    text-transform:uppercase;
+                                                    border-bottom:1px solid #edf1f7;
+                                                ">
+                                                    Qty
+                                                </th>
+
+                                                <th style="
+                                                    padding:12px 8px;
+                                                    text-align:right;
+                                                    background:#f8fafc;
+                                                    color:#64748b;
+                                                    font-size:11px;
+                                                    text-transform:uppercase;
+                                                    border-bottom:1px solid #edf1f7;
+                                                ">
+                                                    Amount
+                                                </th>
+
+                                            </tr>
+                                        </thead>
+
+                                        <tbody>
+                                            {{ITEMS}}
+                                        </tbody>
+
+                                    </table>
+
+                                </div>
+
+                                <div style="
+                                    margin-top:18px;
+                                    padding-top:18px;
+                                    border-top:2px solid #eef2f7;
+                                ">
+
+                                    <table
+                                        width="100%"
+                                        cellpadding="0"
+                                        cellspacing="0"
+                                        border="0">
+
+                                        <tr>
+
+                                            <td style="
+                                                color:#64748b;
+                                                font-size:14px;
+                                                font-weight:600;
+                                            ">
+                                                Total
+                                            </td>
+
+                                            <td style="
+                                                text-align:right;
+                                                color:#111827;
+                                                font-size:24px;
+                                                font-weight:800;
+                                                white-space:nowrap;
+                                            ">
+                                                ₹{{TOTAL}}
+                                            </td>
+
+                                        </tr>
+
+                                    </table>
+
+                                </div>
+
+                            </div>
+
+                            <div style="
+                                padding:22px 20px;
+                                background:#fafbfc;
+                                border-top:1px solid #edf1f7;
+                                text-align:center;
+                            ">
+
+                                <div style="
+                                    color:#475569;
+                                    font-size:13px;
+                                    font-weight:700;
+                                ">
+                                    {{APP_NAME}}
+                                </div>
+
+                                <div style="
+                                    margin-top:6px;
+                                    color:#94a3b8;
+                                    font-size:11px;
+                                    line-height:1.5;
+                                ">
+                                    Thank you for shopping with us.
+                                </div>
+
+                                <div style="
+                                    margin-top:10px;
+                                    color:#c0c6d0;
+                                    font-size:10px;
+                                ">
+                                    © {{APP_NAME}}. All rights reserved.
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </body>
+                </html>
+                """
+                .replace("{{APP_NAME}}", safeAppName)
+                .replace("{{USERNAME}}", safeUsername)
+                .replace("{{ORDER_ID}}", safeOrderNumber)
+                .replace("{{ORDER_DATE}}", safeOrderDate)
+                .replace("{{STATUS}}", escapeHtml(status.name()))
+                .replace("{{STATUS_LABEL}}", escapeHtml(statusLabel))
+                .replace("{{STATUS_MESSAGE}}", escapeHtml(statusMessage))
+                .replace("{{PAYMENT_METHOD}}", escapeHtml(paymentLabel))
+                .replace("{{ITEMS}}", itemsHtml.toString())
+                .replace("{{TOTAL}}", formattedTotal);
+    }
+
+    // ============================================================
+    // ORDER CONFIRMATION EMAIL
+    // ============================================================
+
+    private String buildOrderConfirmationEmail(
+            String username,
+            Order order) {
+
+        String safeUsername =
+                escapeHtml(username);
+
+        String orderNumber =
+                order.getOrderId() != null
+                        ? order.getOrderId()
+                        : String.valueOf(order.getId());
+
+        String safeOrderNumber =
+                escapeHtml(orderNumber);
+
+        // --------------------------------------------------------
+        // ORDER DATE
+        // --------------------------------------------------------
+
+        String orderDate = "N/A";
+
+        if (order.getOrderDate() != null) {
+
+            DateTimeFormatter formatter =
+                    DateTimeFormatter.ofPattern(
+                            "dd MMM yyyy, hh:mm a",
+                            Locale.ENGLISH
+                    );
+
+            orderDate =
+                    order.getOrderDate()
+                            .format(formatter);
+        }
+
+        String safeOrderDate =
+                escapeHtml(orderDate);
+
+        // --------------------------------------------------------
+        // STATUS
+        // --------------------------------------------------------
+
+        String status =
+                order.getStatus() != null
+                        ? order.getStatus().name()
+                        : "PENDING";
+
+        String safeStatus =
+                escapeHtml(status);
+
+        // --------------------------------------------------------
+        // PAYMENT METHOD
+        // --------------------------------------------------------
+
+        String paymentMethod =
+                order.getPaymentMethod() != null
+                        ? order.getPaymentMethod().trim().toUpperCase(Locale.ROOT)
+                        : "COD";
+
+        String paymentLabel =
+                switch (paymentMethod) {
+                    case "UPI" -> "UPI";
+                    case "CARD" -> "Credit / Debit Card";
+                    default -> "Cash on Delivery";
+                };
+
+        String safePaymentMethod =
+                escapeHtml(paymentLabel);
+
+        // --------------------------------------------------------
+        // TOTAL
+        // --------------------------------------------------------
+
+        double total =
+                order.getTotalAmount() != null
+                        ? order.getTotalAmount()
+                        : 0.0;
+
+        String formattedTotal =
+                String.format(
+                        Locale.ENGLISH,
+                        "%.2f",
+                        total
+                );
+
+        // --------------------------------------------------------
+        // ORDER ITEMS
+        // --------------------------------------------------------
+
+        StringBuilder itemsHtml =
+                new StringBuilder();
+
+        if (order.getItems() != null
+                && !order.getItems().isEmpty()) {
+
+            for (OrderItem item : order.getItems()) {
+
+                String productName =
+                        item.getProductName() != null
+                                ? item.getProductName()
+                                : "Product";
+
+                int quantity =
+                        item.getQuantity() != null
+                                ? item.getQuantity()
+                                : 0;
+
+                double subtotal =
+                        item.getSubtotal() != null
+                                ? item.getSubtotal()
+                                : 0.0;
+
+                String formattedSubtotal =
+                        String.format(
+                                Locale.ENGLISH,
+                                "%.2f",
+                                subtotal
+                        );
+
+                itemsHtml
+                        .append("""
+                                <tr>
+                                    <td style="
+                                        padding:15px 8px;
+                                        border-bottom:1px solid #edf1f7;
+                                        color:#172033;
+                                        font-size:14px;
+                                        line-height:1.5;
+                                        word-break:break-word;
+                                    ">
+                                """)
+                        .append(escapeHtml(productName))
+                        .append("""
+                                    </td>
+
+                                    <td style="
+                                        padding:15px 8px;
+                                        border-bottom:1px solid #edf1f7;
+                                        text-align:center;
+                                        color:#667085;
+                                        font-size:14px;
+                                    ">
+                                """)
+                        .append(quantity)
+                        .append("""
+                                    </td>
+
+                                    <td style="
+                                        padding:15px 8px;
+                                        border-bottom:1px solid #edf1f7;
+                                        text-align:right;
+                                        color:#172033;
+                                        font-size:14px;
+                                        font-weight:600;
+                                        white-space:nowrap;
+                                    ">
+                                        ₹
+                                """)
+                        .append(formattedSubtotal)
+                        .append("""
+                                    </td>
+                                </tr>
+                                """);
+            }
+
+        } else {
+
+            itemsHtml.append("""
+                    <tr>
+                        <td colspan="3"
+                            style="
+                                padding:22px 10px;
+                                text-align:center;
+                                color:#94a3b8;
+                                font-size:14px;
+                            ">
+                            Order items unavailable
+                        </td>
+                    </tr>
+                    """);
+        }
+
+        String safeAppName =
+                escapeHtml(getSafeAppName());
+
+        // ========================================================
+        // EMAIL HTML
+        // ========================================================
+
+        return """
+                <!DOCTYPE html>
+                <html>
+
+                <head>
+                    <meta charset="UTF-8">
+
+                    <meta name="viewport"
+                          content="width=device-width,
+                                   initial-scale=1.0">
+
+                    <title>
+                        Order Confirmation - {{ORDER_ID}}
+                    </title>
+                </head>
+
+                <body style="
+                    margin:0;
+                    padding:0;
+                    background:#f3f6fa;
+                    font-family:Arial,Helvetica,sans-serif;
+                    color:#172033;
+                ">
+
+                    <!-- OUTER CONTAINER -->
+
+                    <div style="
+                        width:100%;
+                        padding:28px 12px;
+                        box-sizing:border-box;
+                        background:#f3f6fa;
+                    ">
+
+                        <!-- MAIN CARD -->
+
+                        <div style="
+                            max-width:620px;
+                            margin:0 auto;
+                            background:#ffffff;
+                            border:1px solid #e5e9f0;
+                            border-radius:20px;
+                            overflow:hidden;
+                        ">
+
+                            <!-- BRAND HEADER -->
+
+                            <div style="
+                                padding:28px 24px;
+                                background:#111827;
+                            ">
+
+                                <table
+                                    width="100%"
+                                    cellpadding="0"
+                                    cellspacing="0"
+                                    border="0">
+
+                                    <tr>
+
+                                        <td
+                                            valign="middle"
+                                            style="
+                                                text-align:left;
+                                            ">
+
+                                            <div style="
+                                                font-size:26px;
+                                                line-height:1;
+                                                font-weight:800;
+                                                color:#ffffff;
+                                                letter-spacing:-0.5px;
+                                            ">
+                                                {{APP_NAME}}
+                                            </div>
+
+                                            <div style="
+                                                margin-top:7px;
+                                                color:#9ca3af;
+                                                font-size:11px;
+                                                line-height:1.4;
+                                                letter-spacing:2px;
+                                                text-transform:uppercase;
+                                            ">
+                                                Order Confirmation
+                                            </div>
+
+                                        </td>
+
+                                        <td
+                                            valign="middle"
+                                            style="
+                                                text-align:right;
+                                            ">
+
+                                            <div style="
+                                                display:inline-block;
+                                                padding:8px 12px;
+                                                border:1px solid #374151;
+                                                border-radius:20px;
+                                                color:#d1d5db;
+                                                font-size:11px;
+                                                font-weight:700;
+                                                letter-spacing:0.5px;
+                                            ">
+                                                {{STATUS}}
+                                            </div>
+
+                                        </td>
+
+                                    </tr>
+
+                                </table>
+
+                            </div>
+
+                            <!-- CONTENT -->
+
+                            <div style="
+                                padding:30px 24px;
+                            ">
+
+                                <!-- GREETING -->
+
+                                <h1 style="
+                                    margin:0 0 12px;
+                                    color:#111827;
+                                    font-size:26px;
+                                    line-height:1.25;
+                                    font-weight:700;
+                                    letter-spacing:-0.5px;
+                                ">
+                                    Thanks for your order,
+                                    {{USERNAME}}.
+                                </h1>
+
+                                <p style="
+                                    margin:0;
+                                    color:#667085;
+                                    font-size:14px;
+                                    line-height:1.7;
+                                ">
+                                    Your order has been placed
+                                    successfully. Here is a clean
+                                    summary for your records.
+                                </p>
+
+                                <!-- ORDER INFORMATION -->
+
+                                <div style="
+                                    margin-top:24px;
+                                    padding:18px;
+                                    background:#f8fafc;
+                                    border:1px solid #edf1f7;
+                                    border-radius:14px;
+                                ">
+
+                                    <table
+                                        width="100%"
+                                        cellpadding="0"
+                                        cellspacing="0"
+                                        border="0">
+
+                                        <!-- ORDER ID -->
+
+                                        <tr>
+
+                                            <td style="
+                                                padding:6px 0;
+                                                color:#64748b;
+                                                font-size:12px;
+                                                text-transform:uppercase;
+                                                letter-spacing:0.5px;
+                                            ">
+                                                Order ID
+                                            </td>
+
+                                            <td style="
+                                                padding:6px 0;
+                                                text-align:right;
+                                                color:#111827;
+                                                font-size:13px;
+                                                font-weight:700;
+                                                word-break:break-all;
+                                            ">
+                                                {{ORDER_ID}}
+                                            </td>
+
+                                        </tr>
+
+                                        <!-- DATE -->
+
+                                        <tr>
+
+                                            <td style="
+                                                padding:6px 0;
+                                                color:#64748b;
+                                                font-size:12px;
+                                                text-transform:uppercase;
+                                                letter-spacing:0.5px;
+                                            ">
+                                                Date
+                                            </td>
+
+                                            <td style="
+                                                padding:6px 0;
+                                                text-align:right;
+                                                color:#111827;
+                                                font-size:13px;
+                                            ">
+                                                {{ORDER_DATE}}
+                                            </td>
+
+                                        </tr>
+
+                                        <!-- STATUS -->
+
+                                        <tr>
+
+                                            <td style="
+                                                padding:6px 0;
+                                                color:#64748b;
+                                                font-size:12px;
+                                                text-transform:uppercase;
+                                                letter-spacing:0.5px;
+                                            ">
+                                                Status
+                                            </td>
+
+                                            <td style="
+                                                padding:6px 0;
+                                                text-align:right;
+                                                color:#4f46e5;
+                                                font-size:13px;
+                                                font-weight:700;
+                                            ">
+                                                {{STATUS}}
+                                            </td>
+
+                                        </tr>
+
+                                        <!-- PAYMENT -->
+
+                                        <tr>
+
+                                            <td style="
+                                                padding:6px 0;
+                                                color:#64748b;
+                                                font-size:12px;
+                                                text-transform:uppercase;
+                                                letter-spacing:0.5px;
+                                            ">
+                                                Payment
+                                            </td>
+
+                                            <td style="
+                                                padding:6px 0;
+                                                text-align:right;
+                                                color:#111827;
+                                                font-size:13px;
+                                                font-weight:600;
+                                            ">
+                                                {{PAYMENT_METHOD}}
+                                            </td>
+
+                                        </tr>
+
+                                    </table>
+
+                                </div>
+
+                                <!-- ORDER SUMMARY TITLE -->
+
+                                <h2 style="
+                                    margin:28px 0 14px;
+                                    color:#111827;
+                                    font-size:17px;
+                                    line-height:1.4;
+                                    font-weight:700;
+                                ">
+                                    Order Summary
+                                </h2>
+
+                                <!-- ITEMS -->
+
+                                <div style="
+                                    width:100%;
+                                    overflow:hidden;
+                                    border:1px solid #edf1f7;
+                                    border-radius:14px;
+                                ">
+
+                                    <table
+                                        width="100%"
+                                        cellpadding="0"
+                                        cellspacing="0"
+                                        border="0"
+                                        style="
+                                            width:100%;
+                                            border-collapse:collapse;
+                                        ">
+
+                                        <thead>
+
+                                            <tr>
+
+                                                <th style="
+                                                    padding:12px 8px;
+                                                    text-align:left;
+                                                    background:#f8fafc;
+                                                    color:#64748b;
+                                                    font-size:11px;
+                                                    font-weight:700;
+                                                    text-transform:uppercase;
+                                                    letter-spacing:0.6px;
+                                                    border-bottom:1px solid #edf1f7;
+                                                ">
+                                                    Item
+                                                </th>
+
+                                                <th style="
+                                                    padding:12px 8px;
+                                                    text-align:center;
+                                                    background:#f8fafc;
+                                                    color:#64748b;
+                                                    font-size:11px;
+                                                    font-weight:700;
+                                                    text-transform:uppercase;
+                                                    letter-spacing:0.6px;
+                                                    border-bottom:1px solid #edf1f7;
+                                                ">
+                                                    Qty
+                                                </th>
+
+                                                <th style="
+                                                    padding:12px 8px;
+                                                    text-align:right;
+                                                    background:#f8fafc;
+                                                    color:#64748b;
+                                                    font-size:11px;
+                                                    font-weight:700;
+                                                    text-transform:uppercase;
+                                                    letter-spacing:0.6px;
+                                                    border-bottom:1px solid #edf1f7;
+                                                ">
+                                                    Amount
+                                                </th>
+
+                                            </tr>
+
+                                        </thead>
+
+                                        <tbody>
+
+                                            {{ITEMS}}
+
+                                        </tbody>
+
+                                    </table>
+
+                                </div>
+
+                                <!-- TOTAL -->
+
+                                <div style="
+                                    margin-top:18px;
+                                    padding:18px 0 0;
+                                    border-top:2px solid #eef2f7;
+                                ">
+
+                                    <table
+                                        width="100%"
+                                        cellpadding="0"
+                                        cellspacing="0"
+                                        border="0">
+
+                                        <tr>
+
+                                            <td style="
+                                                color:#64748b;
+                                                font-size:14px;
+                                                font-weight:600;
+                                            ">
+                                                Total
+                                            </td>
+
+                                            <td style="
+                                                text-align:right;
+                                                color:#111827;
+                                                font-size:24px;
+                                                font-weight:800;
+                                                white-space:nowrap;
+                                            ">
+                                                ₹{{TOTAL}}
+                                            </td>
+
+                                        </tr>
+
+                                    </table>
+
+                                </div>
+
+                                <!-- MESSAGE -->
+
+                                <div style="
+                                    margin-top:26px;
+                                    padding:16px;
+                                    background:#fafbfc;
+                                    border-radius:12px;
+                                ">
+
+                                    <p style="
+                                        margin:0;
+                                        color:#7b8494;
+                                        font-size:12px;
+                                        line-height:1.7;
+                                    ">
+                                        This email is your order
+                                        confirmation from
+                                        {{APP_NAME}}.
+                                        Please keep it for your records.
+                                    </p>
+
+                                </div>
+
+                            </div>
+
+                            <!-- FOOTER -->
+
+                            <div style="
+                                padding:22px 20px;
+                                background:#fafbfc;
+                                border-top:1px solid #edf1f7;
+                                text-align:center;
+                            ">
+
+                                <div style="
+                                    color:#475569;
+                                    font-size:13px;
+                                    font-weight:700;
+                                ">
+                                    {{APP_NAME}}
+                                </div>
+
+                                <div style="
+                                    margin-top:6px;
+                                    color:#94a3b8;
+                                    font-size:11px;
+                                    line-height:1.5;
+                                ">
+                                    Thank you for shopping with us.
+                                </div>
+
+                                <div style="
+                                    margin-top:10px;
+                                    color:#c0c6d0;
+                                    font-size:10px;
+                                ">
+                                    © {{APP_NAME}}. All rights reserved.
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </body>
+                </html>
+                """
+                .replace("{{APP_NAME}}", safeAppName)
+                .replace("{{USERNAME}}", safeUsername)
+                .replace("{{ORDER_ID}}", safeOrderNumber)
+                .replace("{{ORDER_DATE}}", safeOrderDate)
+                .replace("{{STATUS}}", safeStatus)
+                .replace("{{PAYMENT_METHOD}}", safePaymentMethod)
+                .replace("{{ITEMS}}", itemsHtml.toString())
+                .replace("{{TOTAL}}", formattedTotal);
+    }
+
+    // ============================================================
+    // HELPERS
+    // ============================================================
+
+    private String getSafeAppName() {
+
+        if (appName == null || appName.isBlank()) {
+            return "Zyphora";
+        }
+
+        return appName.trim();
+    }
+
+    private String normalizeEmail(
+            String email) {
+
+        if (email == null) {
+            return "";
+        }
+
+        return email.trim()
+                .toLowerCase(Locale.ROOT);
+    }
+
+    private boolean isValidEmail(
+            String email) {
+
+        if (email == null || email.isBlank()) {
+            return false;
+        }
+
+        return email.matches(
+                "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
+        );
+    }
+
+    private String safeLog(
+            String value) {
+
+        if (value == null || value.isBlank()) {
+            return "(empty response)";
+        }
+
+        String cleaned =
+                value.replace("\n", " ")
+                        .replace("\r", " ")
+                        .trim();
+
+        if (cleaned.length() > 2000) {
+            return cleaned.substring(0, 2000)
+                    + "...";
+        }
+
+        return cleaned;
+    }
+
+    // ============================================================
+    // HTML ESCAPING
+    // ============================================================
+
+    private String escapeHtml(
+            String value) {
+
+        if (value == null) {
+            return "";
+        }
+
+        return value
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
+    }
+}
