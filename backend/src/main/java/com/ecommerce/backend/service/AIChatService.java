@@ -4,6 +4,7 @@ import com.ecommerce.backend.dto.ChatResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -17,7 +18,7 @@ import java.util.Map;
 @Service
 public class AIChatService {
 
-    private static final String GROQ_API_URL =
+    private static final String GROQ_URL =
             "https://api.groq.com/openai/v1/chat/completions";
 
     private final RestTemplate restTemplate = new RestTemplate();
@@ -28,115 +29,364 @@ public class AIChatService {
     @Value("${groq.model:openai/gpt-oss-120b}")
     private String model;
 
+    // ============================================================
+    // MAIN CHAT METHOD
+    // ============================================================
+
     public ChatResponse reply(String message) {
 
-        if (message == null || message.isBlank()) {
-            throw new IllegalArgumentException("Message cannot be empty");
-        }
+        // --------------------------------------------------------
+        // Validate server configuration
+        // --------------------------------------------------------
 
         if (apiKey == null || apiKey.isBlank()) {
+
+            System.err.println(
+                    "ZYPHORA AI ERROR: GROQ_API_KEY is missing."
+            );
+
             throw new IllegalStateException(
-                    "AI chatbot is not configured on the server"
+                    "AI assistant is not configured on the server."
             );
         }
 
-        Map<String, Object> body = Map.of(
-                "model", model,
-                "messages", List.of(
-                        Map.of(
-                                "role", "system",
-                                "content",
-                                        "You are Zyphora's helpful AI shopping assistant. "
-                                                + "Answer customer questions clearly and naturally. "
-                                                + "You can help with products, categories, shopping guidance, "
-                                                + "orders, account usage, delivery, returns, payments, and general questions. "
-                                                + "Do not invent order status, stock, prices, policies, or account information that you cannot access. "
-                                                + "If a question requires live account/order data, tell the user to use the relevant Zyphora page or contact support. "
-                                                + "Keep answers concise and useful."
-                        ),
-                        Map.of(
-                                "role", "user",
-                                "content", message.trim()
+        if (message == null || message.isBlank()) {
+
+            throw new IllegalArgumentException(
+                    "Message cannot be empty."
+            );
+        }
+
+        String cleanMessage =
+                message.trim();
+
+        // --------------------------------------------------------
+        // Request body
+        // --------------------------------------------------------
+
+        Map<String, Object> body =
+                Map.of(
+                        "model",
+                        model,
+
+                        "messages",
+                        List.of(
+
+                                Map.of(
+                                        "role",
+                                        "system",
+
+                                        "content",
+                                        """
+                                        You are Zyphora's helpful AI shopping assistant.
+
+                                        Zyphora is an online e-commerce shopping application.
+
+                                        You can help customers with:
+                                        - Products
+                                        - Categories
+                                        - Shopping recommendations
+                                        - Cart usage
+                                        - Orders
+                                        - Delivery
+                                        - Returns
+                                        - Payments
+                                        - Account usage
+                                        - General shopping questions
+
+                                        Important rules:
+
+                                        1. Answer clearly and naturally.
+                                        2. Keep answers concise and useful.
+                                        3. Do not invent products, prices, stock availability,
+                                           order status, delivery dates, policies, discounts,
+                                           or account information.
+                                        4. You do not have direct access to a customer's
+                                           private account, cart, or order data.
+                                        5. If the customer asks for live order/account
+                                           information, tell them to open the appropriate
+                                           Zyphora page or contact support.
+                                        6. Never claim that an order was placed, cancelled,
+                                           shipped, delivered, or refunded unless the system
+                                           explicitly provides that information.
+                                        7. For product recommendations, explain the relevant
+                                           shopping considerations.
+                                        8. Be friendly and professional.
+                                        """
+                                ),
+
+                                Map.of(
+                                        "role",
+                                        "user",
+
+                                        "content",
+                                        cleanMessage
+                                )
                         )
+                );
+
+        // --------------------------------------------------------
+        // HTTP headers
+        // --------------------------------------------------------
+
+        HttpHeaders headers =
+                new HttpHeaders();
+
+        headers.setContentType(
+                MediaType.APPLICATION_JSON
+        );
+
+        headers.setAccept(
+                List.of(
+                        MediaType.APPLICATION_JSON
                 )
         );
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
-        headers.setBearerAuth(apiKey.trim());
+        headers.setBearerAuth(
+                apiKey.trim()
+        );
+
+        HttpEntity<Map<String, Object>> request =
+                new HttpEntity<>(
+                        body,
+                        headers
+                );
+
+        // --------------------------------------------------------
+        // Call Groq
+        // --------------------------------------------------------
 
         try {
-            ResponseEntity<Map> response = restTemplate.postForEntity(
-                    GROQ_API_URL,
-                    new HttpEntity<>(body, headers),
-                    Map.class
+
+            System.out.println(
+                    "Zyphora AI: Sending request to Groq..."
             );
 
-            Map<?, ?> json = response.getBody();
-            String text = extractText(json);
+            System.out.println(
+                    "Zyphora AI: Model = " + model
+            );
 
-            if (text == null || text.isBlank()) {
+            ResponseEntity<Map> response =
+                    restTemplate.exchange(
+                            GROQ_URL,
+                            HttpMethod.POST,
+                            request,
+                            Map.class
+                    );
+
+            // ----------------------------------------------------
+            // Validate response
+            // ----------------------------------------------------
+
+            Map<?, ?> json =
+                    response.getBody();
+
+            if (json == null) {
+
+                System.err.println(
+                        "Zyphora AI ERROR: Groq returned an empty response."
+                );
+
                 throw new IllegalStateException(
-                        "AI assistant returned an empty response"
+                        "AI assistant returned an empty response."
                 );
             }
 
-            return new ChatResponse(text.trim());
+            String text =
+                    extractText(json);
+
+            if (text == null || text.isBlank()) {
+
+                System.err.println(
+                        "Zyphora AI ERROR: Groq response did not contain assistant text."
+                );
+
+                System.err.println(
+                        "Groq response: " + json
+                );
+
+                throw new IllegalStateException(
+                        "AI assistant returned an empty response."
+                );
+            }
+
+            System.out.println(
+                    "Zyphora AI: Groq response received successfully."
+            );
+
+            return new ChatResponse(
+                    text.trim()
+            );
 
         } catch (HttpStatusCodeException exception) {
 
-            int status = exception.getStatusCode().value();
+            int status =
+                    exception
+                            .getStatusCode()
+                            .value();
+
+            String responseBody =
+                    exception.getResponseBodyAsString();
 
             System.err.println(
-                    "GROQ API ERROR: HTTP " + status
+                    "================================================"
             );
 
-            // Never expose Groq's 401 as Zyphora's 401.
-            // Otherwise the frontend may interpret it as an expired
-            // Zyphora JWT and log the customer out.
+            System.err.println(
+                    "ZYPHORA AI / GROQ ERROR"
+            );
+
+            System.err.println(
+                    "HTTP Status: " + status
+            );
+
+            System.err.println(
+                    "Groq Response: " +
+                            safeLog(responseBody)
+            );
+
+            System.err.println(
+                    "Model: " + model
+            );
+
+            System.err.println(
+                    "================================================"
+            );
+
+            if (status == 401) {
+
+                throw new IllegalStateException(
+                        "AI provider authentication failed."
+                );
+            }
+
+            if (status == 403) {
+
+                throw new IllegalStateException(
+                        "AI provider rejected the request."
+                );
+            }
+
+            if (status == 429) {
+
+                throw new IllegalStateException(
+                        "AI provider rate limit reached. Please try again shortly."
+                );
+            }
+
+            if (status >= 500) {
+
+                throw new IllegalStateException(
+                        "AI provider is temporarily unavailable."
+                );
+            }
+
             throw new IllegalStateException(
-                    "AI provider request failed",
-                    exception
+                    "AI provider rejected the request."
             );
 
         } catch (ResourceAccessException exception) {
 
             System.err.println(
-                    "GROQ CONNECTION ERROR: " + exception.getMessage()
+                    "ZYPHORA AI NETWORK ERROR: " +
+                            exception.getMessage()
             );
 
             throw new IllegalStateException(
-                    "AI provider is temporarily unavailable",
-                    exception
+                    "Unable to connect to the AI provider."
+            );
+
+        } catch (IllegalStateException exception) {
+
+            throw exception;
+
+        } catch (Exception exception) {
+
+            System.err.println(
+                    "ZYPHORA AI UNEXPECTED ERROR: " +
+                            exception.getClass().getName()
+            );
+
+            System.err.println(
+                    "Message: " +
+                            exception.getMessage()
+            );
+
+            throw new IllegalStateException(
+                    "AI assistant is temporarily unavailable."
             );
         }
     }
 
-    private String extractText(Map<?, ?> json) {
+    // ============================================================
+    // EXTRACT ASSISTANT TEXT
+    // ============================================================
 
-        if (json == null
-                || !(json.get("choices") instanceof List<?> choices)
+    private String extractText(
+            Map<?, ?> json
+    ) {
+
+        Object choicesObject =
+                json.get("choices");
+
+        if (!(choicesObject instanceof List<?> choices)
                 || choices.isEmpty()) {
+
             return null;
         }
 
-        Object choice = choices.get(0);
+        Object firstChoice =
+                choices.get(0);
 
-        if (!(choice instanceof Map<?, ?> choiceMap)) {
+        if (!(firstChoice instanceof Map<?, ?> choice)) {
+
             return null;
         }
 
-        Object message = choiceMap.get("message");
+        Object messageObject =
+                choice.get("message");
 
-        if (!(message instanceof Map<?, ?> messageMap)) {
+        if (!(messageObject instanceof Map<?, ?> message)) {
+
             return null;
         }
 
-        Object content = messageMap.get("content");
+        Object content =
+                message.get("content");
 
-        return content == null
-                ? null
-                : content.toString();
+        if (content == null) {
+
+            return null;
+        }
+
+        return content.toString();
+    }
+
+    // ============================================================
+    // SAFE LOGGING
+    // ============================================================
+
+    private String safeLog(
+            String value
+    ) {
+
+        if (value == null) {
+            return "";
+        }
+
+        String cleaned =
+                value
+                        .replace("\n", " ")
+                        .replace("\r", " ");
+
+        if (cleaned.length() > 1000) {
+
+            return cleaned.substring(
+                    0,
+                    1000
+            ) + "...";
+        }
+
+        return cleaned;
     }
 }
