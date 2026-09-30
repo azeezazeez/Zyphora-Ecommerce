@@ -169,7 +169,7 @@ async function request<T>(
    * Only remove authentication when the backend
    * explicitly returns 401 Unauthorized.
    */
-  if (response.status === 401) {
+  if (response.status === 401 && requiresAuth) {
     clearStoredUser();
 
     window.dispatchEvent(
