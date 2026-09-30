@@ -4,12 +4,10 @@ import com.ecommerce.backend.service.JwtUtil;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.MalformedJwtException;
 import io.jsonwebtoken.security.SignatureException;
-
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -28,18 +26,12 @@ public class JwtFilter extends OncePerRequestFilter {
     @Autowired
     private UserDetailsService userDetailsService;
 
-    // ============================================================
-    // FILTER EXCLUSIONS
-    // ============================================================
-
     @Override
-    protected boolean shouldNotFilter(
-            HttpServletRequest request) {
+    protected boolean shouldNotFilter(HttpServletRequest request) {
 
         String path = request.getServletPath();
         String method = request.getMethod();
 
-        // Always skip CORS preflight requests.
         if ("OPTIONS".equalsIgnoreCase(method)) {
             return true;
         }
@@ -48,7 +40,19 @@ public class JwtFilter extends OncePerRequestFilter {
         if (path.equals("/api/auth/login")
                 || path.equals("/api/auth/register")
                 || path.equals("/api/auth/register/verify-otp")
-                || path.startsWith("/api/auth/forgot-password")) {
+                || path.startsWith("/api/auth/email/")
+                || path.startsWith("/api/auth/forgot-password/")
+                || path.equals("/api/auth/google")
+                || path.equals("/api/auth/google/callback")) {
+            return true;
+        }
+
+        // Public AI endpoints. Do not let a stale/invalid JWT
+        // interfere with an otherwise public chatbot request.
+        if (path.equals("/api/chat")
+                || path.startsWith("/api/chat/")
+                || path.equals("/api/ai/chat")
+                || path.startsWith("/api/ai/chat/")) {
             return true;
         }
 
@@ -68,10 +72,6 @@ public class JwtFilter extends OncePerRequestFilter {
         return false;
     }
 
-    // ============================================================
-    // JWT PROCESSING
-    // ============================================================
-
     @Override
     protected void doFilterInternal(
             HttpServletRequest request,
@@ -79,116 +79,53 @@ public class JwtFilter extends OncePerRequestFilter {
             FilterChain filterChain)
             throws ServletException, IOException {
 
-        String authHeader =
-                request.getHeader("Authorization");
+        String authHeader = request.getHeader("Authorization");
 
-        /*
-         * If there is no Authorization header, do not reject
-         * the request here.
-         *
-         * Spring Security will later decide whether the
-         * requested endpoint requires authentication.
-         */
-        if (authHeader == null
-                || authHeader.isBlank()) {
-
+        // No token: let Spring Security decide whether this endpoint
+        // requires authentication.
+        if (authHeader == null || authHeader.isBlank()) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        /*
-         * An Authorization header exists, but it is not
-         * using the expected Bearer scheme.
-         */
         if (!authHeader.startsWith("Bearer ")) {
-
-            SecurityContextHolder
-                    .clearContext();
-
-            sendError(
-                    response,
-                    "Missing or invalid Authorization header"
-            );
-
+            SecurityContextHolder.clearContext();
+            sendError(response, "Missing or invalid Authorization header");
             return;
         }
 
-        String jwt =
-                authHeader.substring(7).trim();
+        String jwt = authHeader.substring(7).trim();
 
         if (jwt.isEmpty()) {
-
-            SecurityContextHolder
-                    .clearContext();
-
-            sendError(
-                    response,
-                    "Missing or invalid Authorization header"
-            );
-
+            SecurityContextHolder.clearContext();
+            sendError(response, "Missing or invalid Authorization header");
             return;
         }
 
         try {
+            String userEmail = jwtUtil.extractEmail(jwt);
 
-            String userEmail =
-                    jwtUtil.extractEmail(jwt);
-
-            if (userEmail == null
-                    || userEmail.isBlank()) {
-
-                SecurityContextHolder
-                        .clearContext();
-
-                sendError(
-                        response,
-                        "Invalid token — no subject found"
-                );
-
+            if (userEmail == null || userEmail.isBlank()) {
+                SecurityContextHolder.clearContext();
+                sendError(response, "Invalid token — no subject found");
                 return;
             }
 
-            /*
-             * Don't overwrite an authentication that has
-             * already been established.
-             */
-            if (SecurityContextHolder
-                    .getContext()
-                    .getAuthentication() == null) {
-
+            if (SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails =
-                        userDetailsService
-                                .loadUserByUsername(userEmail);
+                        userDetailsService.loadUserByUsername(userEmail);
 
                 if (userDetails == null) {
-
-                    SecurityContextHolder
-                            .clearContext();
-
-                    sendError(
-                            response,
-                            "User not found"
-                    );
-
+                    SecurityContextHolder.clearContext();
+                    sendError(response, "User not found");
                     return;
                 }
 
-                boolean valid =
-                        jwtUtil.validateToken(
-                                jwt,
-                                userEmail
-                        );
+                boolean valid = jwtUtil.validateToken(jwt, userEmail);
 
                 if (!valid) {
-
-                    SecurityContextHolder
-                            .clearContext();
-
-                    sendError(
-                            response,
-                            "Token validation failed"
-                    );
-
+                    SecurityContextHolder.clearContext();
+                    sendError(response, "Token validation failed");
                     return;
                 }
 
@@ -204,40 +141,22 @@ public class JwtFilter extends OncePerRequestFilter {
                                 .buildDetails(request)
                 );
 
-                SecurityContextHolder
-                        .getContext()
+                SecurityContextHolder.getContext()
                         .setAuthentication(authToken);
             }
 
         } catch (ExpiredJwtException e) {
-
-            SecurityContextHolder
-                    .clearContext();
-
-            sendError(
-                    response,
-                    "Token expired"
-            );
-
+            SecurityContextHolder.clearContext();
+            sendError(response, "Token expired");
             return;
 
-        } catch (MalformedJwtException
-                 | SignatureException e) {
-
-            SecurityContextHolder
-                    .clearContext();
-
-            sendError(
-                    response,
-                    "Invalid token"
-            );
-
+        } catch (MalformedJwtException | SignatureException e) {
+            SecurityContextHolder.clearContext();
+            sendError(response, "Invalid token");
             return;
 
         } catch (Exception e) {
-
-            SecurityContextHolder
-                    .clearContext();
+            SecurityContextHolder.clearContext();
 
             System.err.println(
                     "JWT authentication failed: "
@@ -246,23 +165,12 @@ public class JwtFilter extends OncePerRequestFilter {
                             + e.getMessage()
             );
 
-            sendError(
-                    response,
-                    "Authentication failed"
-            );
-
+            sendError(response, "Authentication failed");
             return;
         }
 
-        filterChain.doFilter(
-                request,
-                response
-        );
+        filterChain.doFilter(request, response);
     }
-
-    // ============================================================
-    // ERROR RESPONSE
-    // ============================================================
 
     private void sendError(
             HttpServletResponse response,
@@ -273,31 +181,22 @@ public class JwtFilter extends OncePerRequestFilter {
             return;
         }
 
-        response.setStatus(
-                HttpServletResponse.SC_UNAUTHORIZED
-        );
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType("application/json");
+        response.setCharacterEncoding("UTF-8");
 
-        response.setContentType(
-                "application/json"
-        );
-
-        response.setCharacterEncoding(
-                "UTF-8"
-        );
-
-        String safeMessage =
-                message == null
-                        ? "Authentication failed"
-                        : message
-                                .replace("\\", "\\\\")
-                                .replace("\"", "\\\"");
+        String safeMessage = message == null
+                ? "Authentication failed"
+                : message
+                        .replace("\\", "\\\\")
+                        .replace("\"", "\\\"");
 
         response.getWriter().write(
                 "{"
                         + "\"success\":false,"
                         + "\"message\":\""
                         + safeMessage
-                        + "\","
+                        + "\"," 
                         + "\"data\":null"
                         + "}"
         );
