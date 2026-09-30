@@ -641,9 +641,9 @@ export function AIChatbot() {
 
                         <span>
                           (
-                          {user?.email.split(
-                            '@'
-                          )[0]}
+                          {user?.username ||
+                            user?.email?.split('@')[0] ||
+                            'User'}
                           )
                         </span>
                       </span>
