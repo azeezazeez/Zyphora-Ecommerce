@@ -73,21 +73,13 @@ public class AuthController {
     @Value("${google.redirect.uri}")
     private String googleRedirectUri;
 
-    @Value("${frontend.url:http://localhost:3000}")
+    @Value("${frontend.url}")
     private String frontendUrl;
 
 
     // ============================================================
     // INTERNAL HELPERS
     // ============================================================
-
-    private String getFrontendUrl() {
-        if (frontendUrl == null || frontendUrl.isBlank()) {
-            return "http://localhost:3000";
-        }
-
-        return frontendUrl.trim().replaceAll("/+$", "");
-    }
 
     private User getAuthenticatedUser() {
 
@@ -785,7 +777,7 @@ public class AuthController {
                 || googleClientId.isBlank()) {
 
             response.sendRedirect(
-                    getFrontendUrl() + "/login?googleError="
+                    frontendUrl + "/login?googleError="
                             + URLEncoder.encode(
                             "Google client ID is not configured",
                             StandardCharsets.UTF_8
@@ -799,7 +791,7 @@ public class AuthController {
                 || googleRedirectUri.isBlank()) {
 
             response.sendRedirect(
-                    getFrontendUrl() + "/login?googleError="
+                    frontendUrl + "/login?googleError="
                             + URLEncoder.encode(
                             "Google redirect URI is not configured",
                             StandardCharsets.UTF_8
@@ -884,7 +876,7 @@ public class AuthController {
         if (error != null && !error.isBlank()) {
 
             response.sendRedirect(
-                    getFrontendUrl() + "/login?googleError="
+                    frontendUrl + "/login?googleError="
                             + URLEncoder.encode(
                             error,
                             StandardCharsets.UTF_8
@@ -902,7 +894,7 @@ public class AuthController {
         if (code == null || code.isBlank()) {
 
             response.sendRedirect(
-                    getFrontendUrl() + "/login?googleError="
+                    frontendUrl + "/login?googleError="
                             + URLEncoder.encode(
                             "Google authorization code is missing",
                             StandardCharsets.UTF_8
@@ -942,7 +934,7 @@ public class AuthController {
                 || !storedState.equals(state)) {
 
             response.sendRedirect(
-                    getFrontendUrl() + "/login?googleError="
+                    frontendUrl + "/login?googleError="
                             + URLEncoder.encode(
                             "Invalid Google OAuth state",
                             StandardCharsets.UTF_8
@@ -988,7 +980,7 @@ public class AuthController {
                     );
 
             response.sendRedirect(
-                    getFrontendUrl() + "/oauth-success?token="
+                    frontendUrl + "/oauth-success?token="
                             + encodedToken
             );
 
@@ -1000,7 +992,7 @@ public class AuthController {
                             : e.getMessage();
 
             response.sendRedirect(
-                    getFrontendUrl() + "/login?googleError="
+                    frontendUrl + "/login?googleError="
                             + URLEncoder.encode(
                             message,
                             StandardCharsets.UTF_8
@@ -1015,7 +1007,7 @@ public class AuthController {
                             : e.getMessage();
 
             response.sendRedirect(
-                    getFrontendUrl() + "/login?googleError="
+                    frontendUrl + "/login?googleError="
                             + URLEncoder.encode(
                             message,
                             StandardCharsets.UTF_8
@@ -1063,7 +1055,7 @@ public class AuthController {
             );
 
             response.sendRedirect(
-                    getFrontendUrl() + "/login?googleError="
+                    frontendUrl + "/login?googleError="
                             + URLEncoder.encode(
                             "Google sign-in could not be completed",
                             StandardCharsets.UTF_8
