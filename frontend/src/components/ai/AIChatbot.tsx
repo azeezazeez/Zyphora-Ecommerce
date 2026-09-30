@@ -595,7 +595,7 @@ export function AIChatbot() {
                         />
 
                         <span>
-                          History saved (
+                          (
                           {user?.email.split('@')[0]}
                           )
                         </span>
