@@ -37,7 +37,9 @@ const DEFAULT_MESSAGES: Message[] = [
 // USER-SCOPED CHAT STORAGE
 // ============================================================
 
-const getUserChatKey = (userEmail?: string | null) => {
+const getUserChatKey = (
+  userEmail?: string | null
+) => {
   if (!userEmail) return null;
 
   return `zyphora_ai_chat_messages_${userEmail
@@ -52,13 +54,16 @@ const getUserChatKey = (userEmail?: string | null) => {
 const loadUserMessages = (
   userEmail?: string | null
 ): Message[] => {
-  if (!userEmail) return DEFAULT_MESSAGES;
+  if (!userEmail) {
+    return DEFAULT_MESSAGES;
+  }
 
   try {
     const userKey = getUserChatKey(userEmail);
 
     if (userKey) {
-      const saved = localStorage.getItem(userKey);
+      const saved =
+        localStorage.getItem(userKey);
 
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -73,15 +78,17 @@ const loadUserMessages = (
     }
 
     // --------------------------------------------------------
-    // Legacy/fallback storage migration
+    // LEGACY STORAGE MIGRATION
     // --------------------------------------------------------
 
-    const legacySaved = localStorage.getItem(
-      'zyphora_ai_chat_messages'
-    );
+    const legacySaved =
+      localStorage.getItem(
+        'zyphora_ai_chat_messages'
+      );
 
     if (legacySaved) {
-      const parsed = JSON.parse(legacySaved);
+      const parsed =
+        JSON.parse(legacySaved);
 
       if (
         Array.isArray(parsed) &&
@@ -115,25 +122,25 @@ export function AIChatbot() {
     authModalOpen,
   } = useAuth();
 
-  const isLoggedIn = Boolean(
-    user && user.email
-  );
+  const isLoggedIn =
+    Boolean(user && user.email);
 
   // ==========================================================
   // OPEN / CLOSE STATE
   // ==========================================================
 
-  const [open, setOpen] = useState<boolean>(() => {
-    try {
-      return (
-        localStorage.getItem(
-          STORAGE_OPEN_KEY
-        ) === 'true'
-      );
-    } catch {
-      return false;
-    }
-  });
+  const [open, setOpen] =
+    useState<boolean>(() => {
+      try {
+        return (
+          localStorage.getItem(
+            STORAGE_OPEN_KEY
+          ) === 'true'
+        );
+      } catch {
+        return false;
+      }
+    });
 
   // ==========================================================
   // CLOSE CHAT WHEN AUTH MODAL OPENS
@@ -158,8 +165,11 @@ export function AIChatbot() {
   // INPUT / SENDING STATE
   // ==========================================================
 
-  const [input, setInput] = useState('');
-  const [sending, setSending] = useState(false);
+  const [input, setInput] =
+    useState('');
+
+  const [sending, setSending] =
+    useState(false);
 
   const messagesEndRef =
     useRef<HTMLDivElement>(null);
@@ -170,7 +180,9 @@ export function AIChatbot() {
 
   const [messages, setMessages] =
     useState<Message[]>(() => {
-      return loadUserMessages(user?.email);
+      return loadUserMessages(
+        user?.email
+      );
     });
 
   // ==========================================================
@@ -179,7 +191,9 @@ export function AIChatbot() {
 
   useEffect(() => {
     setMessages(
-      loadUserMessages(user?.email)
+      loadUserMessages(
+        user?.email
+      )
     );
   }, [user?.email]);
 
@@ -191,7 +205,8 @@ export function AIChatbot() {
     if (!user?.email) return;
 
     try {
-      const key = getUserChatKey(user.email);
+      const key =
+        getUserChatKey(user.email);
 
       if (key) {
         localStorage.setItem(
@@ -200,7 +215,7 @@ export function AIChatbot() {
         );
       }
     } catch {
-      // Ignore localStorage quota errors
+      // Ignore localStorage errors
     }
   }, [messages, user?.email]);
 
@@ -226,10 +241,6 @@ export function AIChatbot() {
   const [refreshing, setRefreshing] =
     useState(false);
 
-  /*
-   * Refresh AI assistant connection
-   * WITHOUT deleting chat history.
-   */
   const handleRefresh = async () => {
     setRefreshing(true);
 
@@ -242,9 +253,11 @@ export function AIChatbot() {
     setTimeout(() => {
       setRefreshing(false);
 
-      messagesEndRef.current?.scrollIntoView({
-        behavior: 'smooth',
-      });
+      messagesEndRef.current?.scrollIntoView(
+        {
+          behavior: 'smooth',
+        }
+      );
     }, 450);
   };
 
@@ -253,13 +266,20 @@ export function AIChatbot() {
   // ==========================================================
 
   const clearChat = () => {
-    // Reset the visible conversation
+    // --------------------------------------------------------
+    // RESET VISIBLE CHAT IMMEDIATELY
+    // --------------------------------------------------------
+
     setMessages(DEFAULT_MESSAGES);
 
-    // Remove saved conversation for current user
+    // --------------------------------------------------------
+    // REMOVE CURRENT USER'S SAVED CHAT
+    // --------------------------------------------------------
+
     if (user?.email) {
       try {
-        const key = getUserChatKey(user.email);
+        const key =
+          getUserChatKey(user.email);
 
         if (key) {
           localStorage.removeItem(key);
@@ -269,7 +289,10 @@ export function AIChatbot() {
       }
     }
 
-    // Also remove legacy chat storage if it exists
+    // --------------------------------------------------------
+    // REMOVE LEGACY CHAT STORAGE
+    // --------------------------------------------------------
+
     try {
       localStorage.removeItem(
         'zyphora_ai_chat_messages'
@@ -278,29 +301,34 @@ export function AIChatbot() {
       // Ignore localStorage errors
     }
 
-    // Clear input field
+    // --------------------------------------------------------
+    // CLEAR INPUT
+    // --------------------------------------------------------
+
     setInput('');
 
-    // Scroll back to the beginning
+    // --------------------------------------------------------
+    // SCROLL TO DEFAULT MESSAGE
+    // --------------------------------------------------------
+
     requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({
-        behavior: 'smooth',
-      });
+      messagesEndRef.current?.scrollIntoView(
+        {
+          behavior: 'smooth',
+          block: 'nearest',
+        }
+      );
     });
   };
 
   // ==========================================================
-  // CLEAR CHAT WITH CONFIRMATION
+  // CLEAR CHAT BUTTON
+  //
+  // NO CONFIRMATION POPUP
   // ==========================================================
 
   const handleClearChat = () => {
     if (sending) return;
-
-    const confirmed = window.confirm(
-      'Clear this chat? Your saved AI chat history will be deleted.'
-    );
-
-    if (!confirmed) return;
 
     clearChat();
   };
@@ -313,10 +341,12 @@ export function AIChatbot() {
     if (!open) return;
 
     requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest',
-      });
+      messagesEndRef.current?.scrollIntoView(
+        {
+          behavior: 'smooth',
+          block: 'nearest',
+        }
+      );
     });
   }, [messages, open]);
 
@@ -340,7 +370,9 @@ export function AIChatbot() {
     const previousOverscroll =
       document.body.style.overscrollBehavior;
 
-    document.body.style.overflow = 'hidden';
+    document.body.style.overflow =
+      'hidden';
+
     document.body.style.overscrollBehavior =
       'none';
 
@@ -367,12 +399,20 @@ export function AIChatbot() {
       customMessage ?? input
     ).trim();
 
-    if (!message || sending) return;
+    if (!message || sending) {
+      return;
+    }
 
-    // Clear input immediately
+    // --------------------------------------------------------
+    // CLEAR INPUT
+    // --------------------------------------------------------
+
     setInput('');
 
-    // Add user message
+    // --------------------------------------------------------
+    // ADD USER MESSAGE
+    // --------------------------------------------------------
+
     setMessages((current) => [
       ...current,
       {
@@ -387,7 +427,10 @@ export function AIChatbot() {
       const response =
         await api.chat(message);
 
-      // Add AI response
+      // ------------------------------------------------------
+      // ADD AI RESPONSE
+      // ------------------------------------------------------
+
       setMessages((current) => [
         ...current,
         {
@@ -497,7 +540,9 @@ export function AIChatbot() {
               relative
             "
           >
-            {/* AI TITLE */}
+            {/* =================================================
+                AI TITLE
+                ================================================= */}
 
             <div
               className="
@@ -595,8 +640,10 @@ export function AIChatbot() {
                         />
 
                         <span>
-                          (
-                          {user?.email.split('@')[0]}
+                          History saved (
+                          {user?.email.split(
+                            '@'
+                          )[0]}
                           )
                         </span>
                       </span>
@@ -626,7 +673,9 @@ export function AIChatbot() {
 
               <button
                 type="button"
-                onClick={handleClearChat}
+                onClick={
+                  handleClearChat
+                }
                 disabled={sending}
                 className="
                   relative
@@ -672,7 +721,9 @@ export function AIChatbot() {
 
               <button
                 type="button"
-                onClick={handleRefresh}
+                onClick={
+                  handleRefresh
+                }
                 disabled={refreshing}
                 className="
                   relative
@@ -709,6 +760,7 @@ export function AIChatbot() {
                     h-3.5
                     transition-transform
                     duration-500
+
                     ${
                       refreshing
                         ? 'animate-spin'
@@ -1144,7 +1196,9 @@ export function AIChatbot() {
               ================================================== */}
 
           <form
-            onSubmit={(e) => send(e)}
+            onSubmit={(e) =>
+              send(e)
+            }
             className="
               shrink-0
 
@@ -1196,7 +1250,9 @@ export function AIChatbot() {
               <input
                 value={input}
                 onChange={(e) =>
-                  setInput(e.target.value)
+                  setInput(
+                    e.target.value
+                  )
                 }
                 placeholder="Ask anything..."
                 disabled={sending}
@@ -1304,7 +1360,9 @@ export function AIChatbot() {
         >
           <button
             type="button"
-            onClick={() => setOpen(true)}
+            onClick={() =>
+              setOpen(true)
+            }
             className="
               relative
 
