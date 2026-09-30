@@ -281,8 +281,6 @@ public class EmailService {
                 "Zyphora email configuration: "
                         + "Brevo API key configured="
                         + !apiKey.isBlank()
-                        + ", key length="
-                        + apiKey.length()
                         + ", sender="
                         + sender
         );
