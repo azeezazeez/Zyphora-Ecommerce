@@ -268,7 +268,6 @@ export function AIChatbot() {
   };
 
   const curatedSuggestions = [
-    'Track my order',
     'Fragrance recommendations',
     'Delivery & packaging',
     'Return policy',
