@@ -647,33 +647,64 @@ public class AuthController {
                             )
                     );
 
-        } catch (IllegalStateException e) {
+        } catch (IllegalArgumentException e) {
 
             return ResponseEntity
-                    .status(
-                            HttpStatus.TOO_MANY_REQUESTS
-                    )
+                    .badRequest()
                     .body(
                             ApiResponse.error(
                                     e.getMessage()
                             )
                     );
 
-        } catch (RuntimeException e) {
+        } catch (IllegalStateException e) {
+
+            String message =
+                    e.getMessage() == null
+                            ? "Unable to send OTP email. Please try again later."
+                            : e.getMessage();
+
+            // Only the OTP resend cooldown is a 429.
+            if (message.startsWith("Please wait")) {
+                return ResponseEntity
+                        .status(HttpStatus.TOO_MANY_REQUESTS)
+                        .body(
+                                ApiResponse.error(message)
+                        );
+            }
+
+            // Email provider/configuration failures must NOT be
+            // reported as 429 or 401 to the frontend.
+            System.err.println(
+                    "ZYPHORA EMAIL OTP PROVIDER ERROR: " + message
+            );
 
             return ResponseEntity
-                    .status(
-                            HttpStatus.INTERNAL_SERVER_ERROR
-                    )
+                    .status(HttpStatus.BAD_GATEWAY)
                     .body(
                             ApiResponse.error(
-                                    "Unable to send OTP. "
-                                            + "Please try again later."
+                                    "Unable to send OTP email. Please try again later."
+                            )
+                    );
+
+        } catch (RuntimeException e) {
+
+            System.err.println(
+                    "ZYPHORA EMAIL OTP UNEXPECTED ERROR: "
+                            + e.getClass().getSimpleName()
+                            + " - "
+                            + e.getMessage()
+            );
+
+            return ResponseEntity
+                    .status(HttpStatus.BAD_GATEWAY)
+                    .body(
+                            ApiResponse.error(
+                                    "Unable to send OTP email. Please try again later."
                             )
                     );
         }
     }
-
 
     // ============================================================
     // VERIFY EMAIL OTP
