@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
+const OTP_RESEND_SECONDS = 60;
+
 export function AuthModal() {
   const {
     authModalOpen,
@@ -24,15 +26,30 @@ export function AuthModal() {
 
   const [otp, setOtp] = useState('');
 
-  const [emailSubmitting, setEmailSubmitting] = useState(false);
+  const [emailSubmitting, setEmailSubmitting] =
+    useState(false);
 
-  const [otpSubmitting, setOtpSubmitting] = useState(false);
+  const [otpSubmitting, setOtpSubmitting] =
+    useState(false);
 
-  const [googleSubmitting, setGoogleSubmitting] = useState(false);
+  const [resendSubmitting, setResendSubmitting] =
+    useState(false);
 
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [googleSubmitting, setGoogleSubmitting] =
+    useState(false);
 
-  const [otpStep, setOtpStep] = useState(false);
+  const [errorMsg, setErrorMsg] =
+    useState<string | null>(null);
+
+  const [otpStep, setOtpStep] =
+    useState(false);
+
+  // ============================================================
+  // RESEND OTP COUNTDOWN
+  // ============================================================
+
+  const [resendCountdown, setResendCountdown] =
+    useState(0);
 
   // ============================================================
   // RESET STATE WHEN MODAL OPENS
@@ -43,11 +60,38 @@ export function AuthModal() {
       setGoogleSubmitting(false);
       setEmailSubmitting(false);
       setOtpSubmitting(false);
+      setResendSubmitting(false);
       setErrorMsg(null);
       setOtp('');
       setOtpStep(false);
+      setResendCountdown(0);
     }
   }, [authModalOpen]);
+
+  // ============================================================
+  // OTP RESEND COUNTDOWN TIMER
+  // ============================================================
+
+  useEffect(() => {
+    if (!otpStep || resendCountdown <= 0) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setResendCountdown((current) => {
+        if (current <= 1) {
+          window.clearInterval(timer);
+          return 0;
+        }
+
+        return current - 1;
+      });
+    }, 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [otpStep, resendCountdown]);
 
   // ============================================================
   // BROWSER BACK / TAB FOCUS
@@ -58,6 +102,7 @@ export function AuthModal() {
       setGoogleSubmitting(false);
       setEmailSubmitting(false);
       setOtpSubmitting(false);
+      setResendSubmitting(false);
     };
 
     const handleVisibilityChange = () => {
@@ -65,6 +110,7 @@ export function AuthModal() {
         setGoogleSubmitting(false);
         setEmailSubmitting(false);
         setOtpSubmitting(false);
+        setResendSubmitting(false);
       }
     };
 
@@ -72,14 +118,20 @@ export function AuthModal() {
       setGoogleSubmitting(false);
     };
 
-    window.addEventListener('pageshow', handlePageShow);
+    window.addEventListener(
+      'pageshow',
+      handlePageShow
+    );
 
     document.addEventListener(
       'visibilitychange',
       handleVisibilityChange
     );
 
-    window.addEventListener('focus', handleFocus);
+    window.addEventListener(
+      'focus',
+      handleFocus
+    );
 
     return () => {
       window.removeEventListener(
@@ -146,22 +198,24 @@ export function AuthModal() {
       );
 
       // --------------------------------------------------------
-      // IMPORTANT:
-      //
-      // DO NOT CLOSE THE AUTH MODAL HERE.
-      //
-      // Instead, switch the modal to OTP verification.
+      // SWITCH TO OTP SCREEN
       // --------------------------------------------------------
 
-      setEmail(
-        normalizedEmail
-      );
+      setEmail(normalizedEmail);
 
       setOtp('');
 
       setOtpStep(true);
 
       setErrorMsg(null);
+
+      // --------------------------------------------------------
+      // START 60 SECOND RESEND COUNTDOWN
+      // --------------------------------------------------------
+
+      setResendCountdown(
+        OTP_RESEND_SECONDS
+      );
 
     } catch (err: any) {
       console.error(
@@ -171,9 +225,8 @@ export function AuthModal() {
 
       setErrorMsg(
         err?.message ||
-        'Unable to send verification OTP. Please try again.'
+          'Unable to send verification OTP. Please try again.'
       );
-
     } finally {
       setEmailSubmitting(false);
     }
@@ -222,12 +275,6 @@ export function AuthModal() {
     try {
       // --------------------------------------------------------
       // VERIFY OTP
-      //
-      // AuthContext will:
-      // 1. Call backend
-      // 2. Save JWT
-      // 3. Set current user
-      // 4. Close modal
       // --------------------------------------------------------
 
       await verifyEmailOtp(
@@ -241,14 +288,113 @@ export function AuthModal() {
         err
       );
 
-      // Keep the OTP screen open.
       setErrorMsg(
         err?.message ||
-        'Invalid or expired OTP. Please try again.'
+          'Invalid or expired OTP. Please try again.'
       );
-
     } finally {
       setOtpSubmitting(false);
+    }
+  };
+
+  // ============================================================
+  // RESEND OTP
+  // ============================================================
+
+  const handleResendOtp = async () => {
+    if (
+      resendSubmitting ||
+      otpSubmitting ||
+      resendCountdown > 0
+    ) {
+      return;
+    }
+
+    const normalizedEmail =
+      email.trim().toLowerCase();
+
+    if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        normalizedEmail
+      )
+    ) {
+      setErrorMsg(
+        'Please enter a valid email address.'
+      );
+
+      return;
+    }
+
+    setResendSubmitting(true);
+    setErrorMsg(null);
+
+    try {
+      // --------------------------------------------------------
+      // REQUEST A NEW OTP
+      // --------------------------------------------------------
+
+      await requestEmailOtp(
+        normalizedEmail
+      );
+
+      // --------------------------------------------------------
+      // CLEAR OLD OTP
+      // --------------------------------------------------------
+
+      setOtp('');
+
+      // --------------------------------------------------------
+      // RESTART COUNTDOWN
+      // --------------------------------------------------------
+
+      setResendCountdown(
+        OTP_RESEND_SECONDS
+      );
+
+      setErrorMsg(null);
+
+    } catch (err: any) {
+      console.error(
+        '[Zyphora Auth] OTP resend failed:',
+        err
+      );
+
+      const message =
+        err?.message ||
+        'Unable to resend OTP. Please try again.';
+
+      setErrorMsg(message);
+
+      // --------------------------------------------------------
+      // HANDLE BACKEND COOLDOWN MESSAGE
+      //
+      // Example:
+      // "Please wait 43 seconds before requesting another OTP"
+      // --------------------------------------------------------
+
+      const match =
+        message.match(
+          /Please wait\s+(\d+)\s+seconds?/i
+        );
+
+      if (match) {
+        const remainingSeconds =
+          Number(match[1]);
+
+        if (
+          Number.isFinite(
+            remainingSeconds
+          ) &&
+          remainingSeconds > 0
+        ) {
+          setResendCountdown(
+            remainingSeconds
+          );
+        }
+      }
+
+    } finally {
+      setResendSubmitting(false);
     }
   };
 
@@ -260,6 +406,8 @@ export function AuthModal() {
     setOtpStep(false);
     setOtp('');
     setErrorMsg(null);
+    setResendCountdown(0);
+    setResendSubmitting(false);
   };
 
   // ============================================================
@@ -335,7 +483,6 @@ export function AuthModal() {
           e.stopPropagation()
         }
       >
-
         {/* ================================================== */}
         {/* CLOSE BUTTON                                      */}
         {/* ================================================== */}
@@ -359,7 +506,6 @@ export function AuthModal() {
           <X className="w-5 h-5" />
         </button>
 
-
         {/* ================================================== */}
         {/* OTP VERIFICATION SCREEN                           */}
         {/* ================================================== */}
@@ -367,7 +513,9 @@ export function AuthModal() {
         {otpStep ? (
           <div>
 
-            {/* HEADER */}
+            {/* ==================================================
+                HEADER
+                ================================================== */}
 
             <div className="text-center space-y-2 mb-6">
 
@@ -421,8 +569,9 @@ export function AuthModal() {
 
             </div>
 
-
-            {/* ERROR */}
+            {/* ==================================================
+                ERROR
+                ================================================== */}
 
             {errorMsg && (
               <div
@@ -442,8 +591,9 @@ export function AuthModal() {
               </div>
             )}
 
-
-            {/* OTP FORM */}
+            {/* ==================================================
+                OTP FORM
+                ================================================== */}
 
             <form
               onSubmit={handleVerifyOtp}
@@ -488,7 +638,10 @@ export function AuthModal() {
                   }}
                   placeholder="Enter 6-digit OTP"
                   autoFocus
-                  disabled={otpSubmitting}
+                  disabled={
+                    otpSubmitting ||
+                    resendSubmitting
+                  }
                   className="
                     w-full
                     px-4
@@ -512,14 +665,16 @@ export function AuthModal() {
 
               </div>
 
-
-              {/* VERIFY BUTTON */}
+              {/* ==================================================
+                  VERIFY BUTTON
+                  ================================================== */}
 
               <button
                 id="auth-email-verify-btn"
                 type="submit"
                 disabled={
                   otpSubmitting ||
+                  resendSubmitting ||
                   otp.length !== 6
                 }
                 className="
@@ -559,15 +714,108 @@ export function AuthModal() {
 
             </form>
 
+            {/* ==================================================
+                RESEND OTP
+                ================================================== */}
 
-            {/* CHANGE EMAIL */}
+            <div
+              className="
+                mt-5
+                text-center
+              "
+            >
 
-            <div className="mt-5 text-center">
+              {resendCountdown > 0 ? (
+                <p
+                  className="
+                    text-xs
+                    text-[#6B7280]
+                  "
+                >
+                  Didn't receive the code?
+
+                  <span
+                    className="
+                      ml-1
+                      font-semibold
+                      text-[#17202A]
+                    "
+                  >
+                    Resend OTP in{' '}
+                    {resendCountdown}s
+                  </span>
+                </p>
+              ) : (
+                <div
+                  className="
+                    flex
+                    items-center
+                    justify-center
+                    gap-1.5
+                    text-xs
+                  "
+                >
+                  <span
+                    className="
+                      text-[#6B7280]
+                    "
+                  >
+                    Didn't receive the code?
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={
+                      resendSubmitting ||
+                      otpSubmitting
+                    }
+                    className="
+                      font-semibold
+                      text-purple-600
+                      hover:text-purple-800
+                      transition-colors
+                      disabled:opacity-50
+                      disabled:cursor-not-allowed
+                      inline-flex
+                      items-center
+                      gap-1
+                    "
+                  >
+                    {resendSubmitting ? (
+                      <>
+                        <Loader2
+                          className="
+                            w-3.5
+                            h-3.5
+                            animate-spin
+                          "
+                        />
+
+                        Sending...
+                      </>
+                    ) : (
+                      'Resend OTP'
+                    )}
+                  </button>
+                </div>
+              )}
+
+            </div>
+
+            {/* ==================================================
+                CHANGE EMAIL
+                ================================================== */}
+
+            <div className="mt-4 text-center">
 
               <button
                 type="button"
                 onClick={handleChangeEmail}
-                disabled={otpSubmitting}
+                disabled={
+                  otpSubmitting ||
+                  resendSubmitting
+                }
                 className="
                   inline-flex
                   items-center
@@ -587,8 +835,9 @@ export function AuthModal() {
 
             </div>
 
-
-            {/* OTP INFORMATION */}
+            {/* ==================================================
+                OTP INFORMATION
+                ================================================== */}
 
             <p
               className="
@@ -613,7 +862,9 @@ export function AuthModal() {
 
           <div>
 
-            {/* HEADER */}
+            {/* ==================================================
+                HEADER
+                ================================================== */}
 
             <div
               className="
@@ -664,8 +915,9 @@ export function AuthModal() {
 
             </div>
 
-
-            {/* ERROR */}
+            {/* ==================================================
+                ERROR
+                ================================================== */}
 
             {errorMsg && (
               <div
@@ -685,10 +937,9 @@ export function AuthModal() {
               </div>
             )}
 
-
-            {/* ================================================= */}
-            {/* GOOGLE LOGIN                                     */}
-            {/* ================================================= */}
+            {/* ==================================================
+                GOOGLE LOGIN
+                ================================================== */}
 
             <button
               type="button"
@@ -784,10 +1035,9 @@ export function AuthModal() {
               )}
             </button>
 
-
-            {/* ================================================= */}
-            {/* DIVIDER                                          */}
-            {/* ================================================= */}
+            {/* ==================================================
+                DIVIDER
+                ================================================== */}
 
             <div
               className="
@@ -827,10 +1077,9 @@ export function AuthModal() {
 
             </div>
 
-
-            {/* ================================================= */}
-            {/* EMAIL OTP FORM                                   */}
-            {/* ================================================= */}
+            {/* ==================================================
+                EMAIL OTP FORM
+                ================================================== */}
 
             <form
               onSubmit={handleEmailContinue}
@@ -907,8 +1156,9 @@ export function AuthModal() {
 
               </div>
 
-
-              {/* CONTINUE BUTTON */}
+              {/* ==================================================
+                  CONTINUE BUTTON
+                  ================================================== */}
 
               <button
                 id="auth-email-continue-btn"
@@ -954,8 +1204,9 @@ export function AuthModal() {
 
             </form>
 
-
-            {/* FOOTER */}
+            {/* ==================================================
+                FOOTER
+                ================================================== */}
 
             <p
               className="
