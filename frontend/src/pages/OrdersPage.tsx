@@ -298,7 +298,7 @@ export function OrdersPage() {
                       </span>
 
                       <span className="font-extrabold text-[#17202A]">
-                        ₹
+                        $
                         {Number(order.totalAmount).toLocaleString(
                           'en-IN'
                         )}
@@ -390,7 +390,7 @@ export function OrdersPage() {
                             </p>
 
                             <p className="text-xs text-[#5F6368]">
-                              Qty: {item.quantity} × ₹
+                              Qty: {item.quantity} × $
                               {Number(item.price).toLocaleString(
                                 'en-IN'
                               )}
@@ -400,7 +400,7 @@ export function OrdersPage() {
 
                         <div className="text-right shrink-0">
                           <span className="text-xs sm:text-sm font-extrabold text-[#17202A]">
-                            ₹
+                            $
                             {(
                               Number(item.price) *
                               Number(item.quantity)
