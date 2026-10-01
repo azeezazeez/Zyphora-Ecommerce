@@ -295,7 +295,7 @@ export function ProductCard({ product }: ProductCardProps) {
                   truncate
                 "
               >
-                ₹{Number(product.price).toLocaleString('en-IN')}
+                ${Number(product.price).toLocaleString('en-IN')}
               </span>
             </div>
           </div>
