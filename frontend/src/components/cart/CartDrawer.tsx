@@ -113,7 +113,7 @@ export function CartDrawer() {
                         {item.name || 'Zyphora Item'}
                       </h4>
                       <p className="text-sm font-extrabold text-[#17202A] mt-0.5">
-                        ₹{(item.price || 0).toLocaleString('en-IN')}
+                        ${(item.price || 0).toLocaleString('en-IN')}
                       </p>
                     </div>
 
@@ -160,7 +160,7 @@ export function CartDrawer() {
                 <div className="flex justify-between text-[#5F6368]">
                   <span>Subtotal</span>
                   <span className="font-semibold text-[#17202A]">
-                    ₹{cartTotal.toLocaleString('en-IN')}
+                    ${cartTotal.toLocaleString('en-IN')}
                   </span>
                 </div>
                 <div className="flex justify-between text-[#5F6368]">
@@ -169,7 +169,7 @@ export function CartDrawer() {
                 </div>
                 <div className="flex justify-between text-sm font-extrabold text-[#17202A] pt-1 border-t border-[#E1E5E9]">
                   <span>Estimated Total</span>
-                  <span>₹{cartTotal.toLocaleString('en-IN')}</span>
+                  <span>${cartTotal.toLocaleString('en-IN')}</span>
                 </div>
               </div>
 
