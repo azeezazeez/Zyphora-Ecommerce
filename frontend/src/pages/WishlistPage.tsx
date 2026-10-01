@@ -91,7 +91,7 @@ export function WishlistPage() {
                   {product.name}
                 </Link>
                 <p className="text-base font-extrabold text-[#17202A] mt-2">
-                  ₹{Number(product.price).toLocaleString('en-IN')}
+                  ${Number(product.price).toLocaleString('en-IN')}
                 </p>
               </div>
 
