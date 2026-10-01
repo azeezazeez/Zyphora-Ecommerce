@@ -4,7 +4,7 @@ import {
   Boxes,
   CheckCircle2,
   Clock,
-  IndianRupee,
+  DollarSign,
   Package,
   Plus,
   RefreshCw,
@@ -106,10 +106,10 @@ export function AdminDashboardPage() {
             <div className="bg-white rounded-xl border border-[#E1E5E9] p-5 shadow-2xs">
               <div className="flex items-center justify-between text-[#5F6368] mb-2">
                 <span className="text-xs font-semibold">Total Revenue</span>
-                <IndianRupee className="w-4 h-4 text-emerald-600" />
+                <DollarSign className="w-4 h-4 text-emerald-600" />
               </div>
               <p className="text-2xl font-extrabold text-[#17202A]">
-                ₹{(stats?.totalRevenue ?? 0).toLocaleString('en-IN')}
+                ${(stats?.totalRevenue ?? 0).toLocaleString('en-IN')}
               </p>
               <span className="text-[11px] text-emerald-700 font-medium">Authoritative gross total</span>
             </div>
@@ -224,7 +224,7 @@ export function AdminDashboardPage() {
                       {order.items ? `${order.items.length} items` : `User #${order.userId}`}
                     </td>
                     <td className="py-3 px-4 font-bold text-[#17202A]">
-                      ₹{Number(order.totalAmount).toLocaleString('en-IN')}
+                      ${Number(order.totalAmount).toLocaleString('en-IN')}
                     </td>
                     <td className="py-3 px-4">
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-100 text-[#17202A]">
