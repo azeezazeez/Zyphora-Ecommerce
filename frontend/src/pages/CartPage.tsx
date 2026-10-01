@@ -96,7 +96,7 @@ export function CartPage() {
                       {item.name || 'Marketplace Product'}
                     </Link>
                     <p className="text-xs text-[#5F6368]">
-                      Unit Price: ₹{(item.price || 0).toLocaleString('en-IN')}
+                      Unit Price: ${(item.price || 0).toLocaleString('en-IN')}
                     </p>
                     <span className="inline-block text-[11px] text-emerald-600 font-semibold">
                       In Stock & ready to ship
@@ -109,7 +109,7 @@ export function CartPage() {
                   <div className="text-right">
                     <span className="text-[10px] text-[#8A9199] block">Item Total</span>
                     <span className="text-base font-extrabold text-[#17202A]">
-                      ₹{((item.price || 0) * (item.quantity || 1)).toLocaleString('en-IN')}
+                      ${((item.price || 0) * (item.quantity || 1)).toLocaleString('en-IN')}
                     </span>
                   </div>
 
@@ -165,7 +165,7 @@ export function CartPage() {
             <div className="flex justify-between text-[#5F6368]">
               <span>Items Total ({cartCount})</span>
               <span className="font-semibold text-[#17202A]">
-                ₹{cartTotal.toLocaleString('en-IN')}
+                ${cartTotal.toLocaleString('en-IN')}
               </span>
             </div>
             <div className="flex justify-between text-[#5F6368]">
@@ -178,7 +178,7 @@ export function CartPage() {
             </div>
             <div className="border-t border-[#E1E5E9] pt-2 flex justify-between text-base font-extrabold text-[#17202A]">
               <span>Total Amount</span>
-              <span>₹{cartTotal.toLocaleString('en-IN')}</span>
+              <span>${cartTotal.toLocaleString('en-IN')}</span>
             </div>
           </div>
 
