@@ -981,7 +981,7 @@ public class EmailService {
                                         font-weight:600;
                                         white-space:nowrap;
                                     ">
-                                        ₹
+                                        $
                                 """)
                         .append(
                                 String.format(
@@ -1324,7 +1324,7 @@ public class EmailService {
                                                 font-weight:800;
                                                 white-space:nowrap;
                                             ">
-                                                ₹{{TOTAL}}
+                                                ${{TOTAL}}
                                             </td>
 
                                         </tr>
@@ -1547,7 +1547,7 @@ public class EmailService {
                                         font-weight:600;
                                         white-space:nowrap;
                                     ">
-                                        ₹
+                                        $
                                 """)
                         .append(formattedSubtotal)
                         .append("""
@@ -1972,7 +1972,7 @@ public class EmailService {
                                                 font-weight:800;
                                                 white-space:nowrap;
                                             ">
-                                                ₹{{TOTAL}}
+                                                ${{TOTAL}}
                                             </td>
 
                                         </tr>
