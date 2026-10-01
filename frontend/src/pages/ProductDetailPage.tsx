@@ -199,7 +199,7 @@ export function ProductDetailPage() {
               {/* Price & Stock Display */}
               <div className="flex items-baseline gap-4 py-2 border-y border-[#E1E5E9]">
                 <div className="text-3xl font-extrabold text-[#17202A]">
-                  ₹{Number(product.price).toLocaleString('en-IN')}
+                  ${Number(product.price).toLocaleString('en-IN')}
                 </div>
                 <div>
                   {product.stock > 5 ? (
