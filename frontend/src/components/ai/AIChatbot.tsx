@@ -490,7 +490,7 @@ export function AIChatbot() {
             max-h-[640px]
 
             sm:left-auto
-            sm:right-6
+            sm:left-6
             sm:bottom-6
             sm:w-[410px]
             sm:h-[580px]
