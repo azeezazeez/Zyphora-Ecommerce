@@ -582,7 +582,7 @@ export function CheckoutPage() {
             </span>
 
             <span className="text-base font-extrabold text-[#17202A]">
-              ₹
+              $
               {Number(
                 placedOrder.totalAmount ||
                   cartTotal
@@ -1888,7 +1888,7 @@ export function CheckoutPage() {
                 </div>
 
                 <span className="font-bold text-[#17202A] shrink-0">
-                  ₹
+                  $
                   {(
                     (item.price || 0) *
                     (item.quantity || 1)
@@ -1911,7 +1911,7 @@ export function CheckoutPage() {
               </span>
 
               <span className="font-semibold text-[#17202A]">
-                ₹
+                $
                 {cartTotal.toLocaleString(
                   'en-IN'
                 )}
@@ -1935,7 +1935,7 @@ export function CheckoutPage() {
               </span>
 
               <span>
-                ₹
+                $
                 {cartTotal.toLocaleString(
                   'en-IN'
                 )}
