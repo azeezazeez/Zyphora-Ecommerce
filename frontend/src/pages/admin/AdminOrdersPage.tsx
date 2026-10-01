@@ -447,7 +447,7 @@ export function AdminOrdersPage() {
 
                       {/* Total */}
                       <td className="py-3.5 px-4 font-extrabold text-[#17202A]">
-                        ₹
+                        $
                         {Number(
                           order.totalAmount
                         ).toLocaleString('en-IN')}
