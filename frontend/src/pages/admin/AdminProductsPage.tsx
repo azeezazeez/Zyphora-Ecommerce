@@ -274,7 +274,7 @@ export function AdminProductsPage() {
                       </td>
                       <td className="py-3 px-4 text-[#5F6368]">{p.category}</td>
                       <td className="py-3 px-4 font-bold text-[#17202A]">
-                        ₹{Number(p.price).toLocaleString('en-IN')}
+                        ${Number(p.price).toLocaleString('en-IN')}
                       </td>
                       <td className="py-3 px-4">
                         {p.stock > 5 ? (
@@ -349,7 +349,7 @@ export function AdminProductsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-[#17202A] mb-1">
-                    Price (₹) <span className="text-rose-500">*</span>
+                    Price ($) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="number"
