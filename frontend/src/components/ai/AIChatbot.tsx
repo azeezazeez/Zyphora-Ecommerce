@@ -1,128 +1,96 @@
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 
-              rounded-full
+import {
+  Loader2,
+  Lock,
+  RotateCcw,
+  Send,
+  Trash2,
+  UserCheck,
+  X,
+  Zap, 
+} from 'lucide-react';
 
-              bg-white
-              hover:bg-neutral-50
+import { api } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
-              text-black
+type Message = {
+  role: 'user' | 'assistant';
+  text: string;
+};
 
-              border
-              border-black/15
+const STORAGE_OPEN_KEY = 'zyphora_ai_chat_open';
 
-              hover:border-black/35
+const DEFAULT_MESSAGES: Message[] = [
+  {
+    role: 'assistant',
+    text:
+      'Hi! I’m Zyphora AI. Ask me about products, shopping, orders, delivery, accounts, or anything else.',
+  },
+];
 
-              shadow-[0_10px_25px_-5px_rgba(0,0,0,0.18),0_4px_10px_-2px_rgba(0,0,0,0.06)]
+// ============================================================
+// USER-SCOPED CHAT STORAGE
+// ============================================================
 
-              hover:shadow-[0_16px_32px_-6px_rgba(0,0,0,0.24)]
+const getUserChatKey = (
+  userEmail?: string | null
+) => {
+  if (!userEmail) return null;
 
-              hover:scale-105
-              active:scale-95
+  return `zyphora_ai_chat_messages_${userEmail
+    .trim()
+    .toLowerCase()}`;
+};
 
-              transition-all
-              duration-200
+// ============================================================
+// LOAD USER CHAT HISTORY
+// ============================================================
 
-              flex
-              items-center
-              justify-center
+const loadUserMessages = (
+  userEmail?: string | null
+): Message[] => {
+  if (!userEmail) {
+    return DEFAULT_MESSAGES;
+  }
 
-              sm:gap-2.5
+  try {
+    const userKey = getUserChatKey(userEmail);
 
-              group
-            "
-            aria-label="Ask Zyphora AI"
-          >
-            {/* AI ICON */}
+    if (userKey) {
+      const saved =
+        localStorage.getItem(userKey);
 
-            <div
-              className="
-                w-8
-                h-8
+      if (saved) {
+        const parsed = JSON.parse(saved);
 
-                sm:w-7
-                sm:h-7
+        if (
+          Array.isArray(parsed) &&
+          parsed.length > 0
+        ) {
+          return parsed;
+        }
+      }
+    }
 
-                rounded-full
+    // --------------------------------------------------------
+    // LEGACY STORAGE MIGRATION
+    // --------------------------------------------------------
 
-                bg-black
+    const legacySaved =
+      localStorage.getItem(
+        'zyphora_ai_chat_messages'
+      );
 
-                border
-                border-black
+    if (legacySaved) {
+      const parsed =
+        JSON.parse(legacySaved);
 
-                flex
-                items-center
-                justify-center
-
-                shrink-0
-
-                transition-transform
-
-                group-hover:scale-105
-              "
-            >
-              <Zap
-                className="
-                  w-4
-                  h-4
-
-                  sm:w-3.5
-                  sm:h-3.5
-
-                  text-white
-                  fill-white
-                "
-              />
-            </div>
-
-            {/* AI LABEL */}
-
-            <span
-              className="
-                hidden
-                sm:inline
-
-                text-sm
-                font-semibold
-
-                tracking-wide
-
-                text-black
-
-                select-none
-
-                pr-1
-              "
-            >
-              Ask Zyphora AI
-            </span>
-
-            {/* LIVE INDICATOR */}
-
-            <span
-              className="
-                w-2
-                h-2
-
-                rounded-full
-
-                bg-black
-
-                ring-2
-                ring-white
-
-                animate-pulse
-
-                absolute
-
-                top-1
-                right-1
-
-                sm:static
-                sm:ring-0
-                sm:top-auto
-                sm:right-auto
-              "
-              aria-hidden="true"
-            />
-          </button>
-        </div>
-      )}
+      if (
+        Array.isArray(parsed) &&
+        parsed.length > 0
+      ) {
