@@ -291,7 +291,7 @@ export function ShopPage() {
               </h3>
               {maxPrice !== null && (
                 <span className="text-xs font-semibold text-indigo-600">
-                  ₹{maxPrice.toLocaleString('en-IN')}
+                  ${maxPrice.toLocaleString('en-IN')}
                 </span>
               )}
             </div>
@@ -305,8 +305,8 @@ export function ShopPage() {
               className="w-full accent-indigo-600 cursor-pointer"
             />
             <div className="flex justify-between text-[11px] text-[#8A9199] mt-1">
-              <span>₹100</span>
-              <span>₹{highestProductPrice.toLocaleString('en-IN')}</span>
+              <span>$100</span>
+              <span>${highestProductPrice.toLocaleString('en-IN')}</span>
             </div>
           </div>
         </aside>
