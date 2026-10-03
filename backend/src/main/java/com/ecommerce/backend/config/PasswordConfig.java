@@ -10,13 +10,6 @@ public class PasswordConfig {
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-
-        return new Argon2PasswordEncoder(
-                16,       // Salt length
-                32,       // Hash length
-                1,        // Parallelism
-                65536,    // Memory in KB = 64 MB
-                3         // Iterations
-        );
+        return Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8();
     }
 }
